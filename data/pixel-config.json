@@ -1,6 +1,10 @@
 {
-  "default": "1213472546398709",
+  "defaultPixelId": "1213472546398709",
+  "defaultCtaUrl": "https://mynuora.com/products/feminine-balance-gummies-1",
   "articles": {
-    "morning-ritual-exposed": ""
+    "morning-ritual-exposed": {
+      "pixelId": "",
+      "ctaUrl": ""
+    }
   }
 }

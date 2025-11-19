@@ -3,24 +3,48 @@ import ArticleHeader from '@/components/ArticleHeader';
 import AuthorityBadge from '@/components/AuthorityBadge';
 import FBComments from '@/components/FBComments';
 import PixelTracker from '@/components/PixelTracker';
+import UrlPreserver from '@/components/UrlPreserver';
 import Link from 'next/link';
 import fs from 'fs';
 import path from 'path';
 import { notFound } from 'next/navigation';
 
-// Helper to get pixel ID
-function getPixelId(slug: string) {
+// Helper to get article config
+function getArticleConfig(slug: string) {
     try {
         const configPath = path.join(process.cwd(), 'data', 'pixel-config.json');
         if (fs.existsSync(configPath)) {
             const fileContents = fs.readFileSync(configPath, 'utf8');
             const config = JSON.parse(fileContents);
-            return config.articles[slug] || config.default;
+
+            // Handle both old and new config structures for backward compatibility during dev
+            const defaultPixelId = config.defaultPixelId || config.default || '1213472546398709';
+            const defaultCtaUrl = config.defaultCtaUrl || 'https://mynuora.com/products/feminine-balance-gummies-1';
+
+            const articleConfig = config.articles?.[slug];
+
+            // Check if articleConfig is object (new) or string (old)
+            let pixelId = defaultPixelId;
+            let ctaUrl = defaultCtaUrl;
+
+            if (articleConfig) {
+                if (typeof articleConfig === 'string') {
+                    pixelId = articleConfig;
+                } else {
+                    pixelId = articleConfig.pixelId || defaultPixelId;
+                    ctaUrl = articleConfig.ctaUrl || defaultCtaUrl;
+                }
+            }
+
+            return { pixelId, ctaUrl };
         }
     } catch (e) {
         console.error('Error reading pixel config:', e);
     }
-    return '1213472546398709'; // Fallback
+    return {
+        pixelId: '1213472546398709',
+        ctaUrl: 'https://mynuora.com/products/feminine-balance-gummies-1'
+    };
 }
 
 // Get article from JSON database
@@ -46,18 +70,15 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
         notFound();
     }
 
-    const pixelId = getPixelId(slug);
+    const { pixelId, ctaUrl } = getArticleConfig(slug);
 
     return (
         <div className="min-h-screen bg-white pb-10 font-serif">
             <PixelTracker pixelId={pixelId} />
+            <UrlPreserver />
             <ArticleHeader />
 
-            {/* Live Readership Bar */}
-            <div className="bg-red-600 text-white text-center py-1 text-xs font-bold font-sans flex items-center justify-center gap-2 animate-pulse">
-                <span className="w-2 h-2 bg-white rounded-full inline-block"></span>
-                842 people are reading this report right now
-            </div>
+
 
             <main className="pt-6 px-4 max-w-xl mx-auto">
 
@@ -111,7 +132,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
                 {/* Subtle CTA Link */}
                 <div className="my-10 text-center">
                     <p className="text-lg font-serif mb-2">Curious about the science?</p>
-                    <Link href="#" className="text-[#1877F2] font-bold text-xl hover:underline font-sans">
+                    <Link href={ctaUrl} className="text-[#1877F2] font-bold text-xl hover:underline font-sans">
                         Click here to read the full clinical study on the 5-Second Ritual »
                     </Link>
                 </div>
