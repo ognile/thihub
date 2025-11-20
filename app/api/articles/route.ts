@@ -22,7 +22,7 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { slug, comments } = body;
+        const { slug, comments, ctaText, ctaTitle, ctaDescription } = body;
 
         if (!slug) {
             return NextResponse.json({ error: 'Slug is required' }, { status: 400 });
@@ -39,6 +39,9 @@ export async function POST(request: Request) {
                 if (comments) {
                     articles[articleIndex].comments = comments;
                 }
+                if (ctaText) articles[articleIndex].ctaText = ctaText;
+                if (ctaTitle) articles[articleIndex].ctaTitle = ctaTitle;
+                if (ctaDescription) articles[articleIndex].ctaDescription = ctaDescription;
                 // Can add other fields here if needed
 
                 fs.writeFileSync(articlesPath, JSON.stringify(articles, null, 4));

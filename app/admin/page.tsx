@@ -14,6 +14,9 @@ interface Article {
     id: string;
     slug: string;
     title: string;
+    ctaText?: string;
+    ctaTitle?: string;
+    ctaDescription?: string;
     comments?: CommentData[];
 }
 
@@ -113,24 +116,24 @@ export default function AdminDashboard() {
         }
     };
 
-    const handleSaveComments = async (slug: string, comments: CommentData[]) => {
-        setSaveStatus('Saving comments...');
+    const handleSaveComments = async (slug: string, comments: CommentData[], ctaText?: string, ctaTitle?: string, ctaDescription?: string) => {
+        setSaveStatus('Saving article...');
         try {
             const res = await fetch('/api/articles', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ slug, comments }),
+                body: JSON.stringify({ slug, comments, ctaText, ctaTitle, ctaDescription }),
             });
 
             if (res.ok) {
-                setSaveStatus('Comments saved!');
-                setArticles(articles.map(a => a.slug === slug ? { ...a, comments } : a));
+                setSaveStatus('Article saved!');
+                setArticles(articles.map(a => a.slug === slug ? { ...a, comments, ctaText, ctaTitle, ctaDescription } : a));
                 setTimeout(() => setSaveStatus(''), 2000);
             } else {
-                setSaveStatus('Error saving comments');
+                setSaveStatus('Error saving article');
             }
         } catch (e) {
-            setSaveStatus('Error saving comments');
+            setSaveStatus('Error saving article');
         }
     };
 
@@ -283,6 +286,72 @@ export default function AdminDashboard() {
                                         </div>
                                     </div>
 
+                                    {/* Content Customization */}
+                                    <div className="bg-gray-50 p-5 rounded-xl border border-gray-100">
+                                        <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                            Content Customization
+                                        </h3>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1">CTA Title</label>
+                                            <input
+                                                type="text"
+                                                placeholder="e.g. Curious about the science?"
+                                                value={selectedArticleData.ctaTitle || ''}
+                                                onChange={(e) => {
+                                                    const newArticles = articles.map(a =>
+                                                        a.slug === selectedArticle ? { ...a, ctaTitle: e.target.value } : a
+                                                    );
+                                                    setArticles(newArticles);
+                                                }}
+                                                className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-3"
+                                            />
+
+                                            <label className="block text-xs font-medium text-gray-500 mb-1">CTA Button Text</label>
+                                            <input
+                                                type="text"
+                                                placeholder="e.g. Watch The Video »"
+                                                value={selectedArticleData.ctaText || ''}
+                                                onChange={(e) => {
+                                                    const newArticles = articles.map(a =>
+                                                        a.slug === selectedArticle ? { ...a, ctaText: e.target.value } : a
+                                                    );
+                                                    setArticles(newArticles);
+                                                }}
+                                                className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-3"
+                                            />
+
+                                            <label className="block text-xs font-medium text-gray-500 mb-1">CTA Subtext</label>
+                                            <input
+                                                type="text"
+                                                placeholder="e.g. Secure, verified link to official research."
+                                                value={selectedArticleData.ctaDescription || ''}
+                                                onChange={(e) => {
+                                                    const newArticles = articles.map(a =>
+                                                        a.slug === selectedArticle ? { ...a, ctaDescription: e.target.value } : a
+                                                    );
+                                                    setArticles(newArticles);
+                                                }}
+                                                className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-3"
+                                            />
+
+                                            <div className="flex justify-end">
+                                                <button
+                                                    onClick={() => handleSaveComments(
+                                                        selectedArticle,
+                                                        selectedArticleData.comments || [],
+                                                        selectedArticleData.ctaText,
+                                                        selectedArticleData.ctaTitle,
+                                                        selectedArticleData.ctaDescription
+                                                    )}
+                                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                                                >
+                                                    Save Content
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     {/* Comments Editor */}
                                     <div>
                                         <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -291,7 +360,13 @@ export default function AdminDashboard() {
                                         </h3>
                                         <CommentEditor
                                             comments={selectedArticleData.comments || []}
-                                            onChange={(newComments) => handleSaveComments(selectedArticle, newComments)}
+                                            onChange={(newComments) => handleSaveComments(
+                                                selectedArticle,
+                                                newComments,
+                                                selectedArticleData.ctaText,
+                                                selectedArticleData.ctaTitle,
+                                                selectedArticleData.ctaDescription
+                                            )}
                                         />
                                     </div>
                                 </div>

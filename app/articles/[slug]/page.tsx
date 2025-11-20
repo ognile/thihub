@@ -128,11 +128,11 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
 
                 {/* Subtle CTA Link */}
                 <div className="my-12 p-8 bg-blue-50 rounded-xl text-center border border-blue-100 shadow-sm">
-                    <p className="text-xl font-serif mb-4 text-gray-900 font-medium">Curious about the science?</p>
+                    <p className="text-xl font-serif mb-4 text-gray-900 font-medium">{article.ctaTitle || "Curious about the science?"}</p>
                     <Link href={ctaUrl} className="inline-block bg-[#0F4C81] text-white px-8 py-4 rounded-lg font-sans font-bold text-lg hover:bg-[#0a3b66] transition-colors shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all">
-                        Read the Clinical Study »
+                        {article.ctaText || "Read the Clinical Study »"}
                     </Link>
-                    <p className="mt-4 text-xs text-gray-500 font-sans">Secure, verified link to official research.</p>
+                    <p className="mt-4 text-xs text-gray-500 font-sans">{article.ctaDescription || "Secure, verified link to official research."}</p>
                 </div>
 
                 {/* Facebook Comments Section */}
