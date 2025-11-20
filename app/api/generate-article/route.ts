@@ -37,6 +37,7 @@ async function saveArticles(articles: any[]) {
         await put(BLOB_URL, JSON.stringify(articles, null, 4), {
             access: 'public',
             contentType: 'application/json',
+            addRandomSuffix: true,
         });
     } else {
         const filePath = path.join(process.cwd(), 'data', 'articles.json');

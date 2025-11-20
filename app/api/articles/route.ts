@@ -35,6 +35,7 @@ async function saveArticles(articles: any[]) {
         await put(BLOB_URL, JSON.stringify(articles, null, 4), {
             access: 'public',
             contentType: 'application/json',
+            addRandomSuffix: true,
         });
     } else {
         fs.writeFileSync(articlesPath, JSON.stringify(articles, null, 4));

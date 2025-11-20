@@ -12,8 +12,8 @@ import { notFound } from 'next/navigation';
 // Get article from API (which handles both local files and Blob storage)
 async function getArticle(slug: string) {
     try {
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-        const response = await fetch(`${baseUrl}/api/articles`, {
+        // Use relative URL - works in both local and production
+        const response = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/articles`, {
             cache: 'no-store'
         });
 
