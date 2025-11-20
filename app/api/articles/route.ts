@@ -36,6 +36,7 @@ async function saveArticles(articles: any[]) {
             access: 'public',
             contentType: 'application/json',
             addRandomSuffix: false,
+            allowOverwrite: true,
         });
     } else {
         fs.writeFileSync(articlesPath, JSON.stringify(articles, null, 4));

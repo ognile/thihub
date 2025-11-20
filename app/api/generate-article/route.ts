@@ -38,6 +38,7 @@ async function saveArticles(articles: any[]) {
             access: 'public',
             contentType: 'application/json',
             addRandomSuffix: false,
+            allowOverwrite: true,
         });
     } else {
         const filePath = path.join(process.cwd(), 'data', 'articles.json');
