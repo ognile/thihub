@@ -2,9 +2,47 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { put, head } from '@vercel/blob';
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const isProduction = process.env.VERCEL_ENV === 'production';
+const BLOB_URL = 'articles.json';
+
+async function getArticles() {
+    if (isProduction) {
+        try {
+            const blobExists = await head(BLOB_URL).catch(() => null);
+            if (blobExists) {
+                const response = await fetch(blobExists.url);
+                return await response.json();
+            }
+            return [];
+        } catch (e) {
+            console.error('Error reading from blob:', e);
+            return [];
+        }
+    } else {
+        const filePath = path.join(process.cwd(), 'data', 'articles.json');
+        if (fs.existsSync(filePath)) {
+            const fileData = fs.readFileSync(filePath, 'utf8');
+            return JSON.parse(fileData);
+        }
+        return [];
+    }
+}
+
+async function saveArticles(articles: any[]) {
+    if (isProduction) {
+        await put(BLOB_URL, JSON.stringify(articles, null, 4), {
+            access: 'public',
+            contentType: 'application/json',
+        });
+    } else {
+        const filePath = path.join(process.cwd(), 'data', 'articles.json');
+        fs.writeFileSync(filePath, JSON.stringify(articles, null, 4));
+    }
+}
 
 export async function POST(request: Request) {
     try {
@@ -111,21 +149,19 @@ export async function POST(request: Request) {
             ctaUrl: ctaUrl || ""
         };
 
-        // Save to file
-        const filePath = path.join(process.cwd(), 'data', 'articles.json');
-        const fileData = fs.readFileSync(filePath, 'utf8');
-        const articles = JSON.parse(fileData);
+        // Get existing articles
+        const articles = await getArticles();
 
         // Check if slug exists and append random string if so (only if auto-generated or collision)
         let finalSlug = slug;
         if (articles.some((a: any) => a.slug === finalSlug)) {
-            finalSlug = `${slug} -${Math.random().toString(36).substring(7)} `;
+            finalSlug = `${slug}-${Math.random().toString(36).substring(7)}`;
             newArticle.slug = finalSlug;
             newArticle.id = finalSlug;
         }
 
         articles.push(newArticle);
-        fs.writeFileSync(filePath, JSON.stringify(articles, null, 4));
+        await saveArticles(articles);
 
         return NextResponse.json({ success: true, slug: finalSlug });
 

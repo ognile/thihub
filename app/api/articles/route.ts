@@ -1,19 +1,50 @@
-
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { revalidatePath } from 'next/cache';
+import { put, head } from '@vercel/blob';
 
 const articlesPath = path.join(process.cwd(), 'data', 'articles.json');
+const BLOB_URL = 'articles.json';
+const isProduction = process.env.VERCEL_ENV === 'production';
+
+async function getArticles() {
+    if (isProduction) {
+        try {
+            const blobExists = await head(BLOB_URL).catch(() => null);
+            if (blobExists) {
+                const response = await fetch(blobExists.url);
+                return await response.json();
+            }
+            return [];
+        } catch (e) {
+            console.error('Error reading from blob:', e);
+            return [];
+        }
+    } else {
+        if (fs.existsSync(articlesPath)) {
+            const fileContents = fs.readFileSync(articlesPath, 'utf8');
+            return JSON.parse(fileContents);
+        }
+        return [];
+    }
+}
+
+async function saveArticles(articles: any[]) {
+    if (isProduction) {
+        await put(BLOB_URL, JSON.stringify(articles, null, 4), {
+            access: 'public',
+            contentType: 'application/json',
+        });
+    } else {
+        fs.writeFileSync(articlesPath, JSON.stringify(articles, null, 4));
+    }
+}
 
 export async function GET() {
     try {
-        if (fs.existsSync(articlesPath)) {
-            const fileContents = fs.readFileSync(articlesPath, 'utf8');
-            const articles = JSON.parse(fileContents);
-            return NextResponse.json(articles);
-        }
-        return NextResponse.json([]);
+        const articles = await getArticles();
+        return NextResponse.json(articles);
     } catch (e) {
         console.error('Error reading articles:', e);
         return NextResponse.json({ error: 'Failed to read articles' }, { status: 500 });
@@ -29,13 +60,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Slug is required' }, { status: 400 });
         }
 
-        // Ensure the articles file exists before attempting to read
-        if (!fs.existsSync(articlesPath)) {
-            return NextResponse.json({ error: 'Database not found' }, { status: 500 });
-        }
-
-        const fileContents = fs.readFileSync(articlesPath, 'utf8');
-        let articles = JSON.parse(fileContents);
+        let articles = await getArticles();
 
         const articleIndex = articles.findIndex((a: any) => a.slug === slug);
 
@@ -53,7 +78,7 @@ export async function POST(request: Request) {
             if (date) articles[articleIndex].date = date;
             if (image) articles[articleIndex].image = image;
 
-            fs.writeFileSync(articlesPath, JSON.stringify(articles, null, 4));
+            await saveArticles(articles);
 
             // Revalidate the article page
             revalidatePath(`/articles/${slug}`);
