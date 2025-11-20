@@ -24,49 +24,55 @@ export async function POST(request: Request) {
         const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
 
         const prompt = `
-            You are an expert direct-response copywriter and content formatter.
+            You are an expert content formatter and HTML structurer.
             
             YOUR TASK:
-            Take the provided RAW TEXT and structure it into a JSON object for a high-converting health news article.
+            Take the provided RAW TEXT and format it into a JSON object for a health news site.
             
-            CRITICAL INSTRUCTIONS FOR PARSING:
-            1.  **Headline**: Identify the main headline. It is usually the first line or the most prominent statement at the top.
-            2.  **Subheadline**: Identify the subheadline. It usually follows the headline and elaborates on the promise.
-            3.  **Body Content**: 
-                -   Format the rest of the text as clean, semantic HTML.
-                -   Use <h2> for major section breaks.
-                -   Use <h3> for sub-sections.
-                -   Use <blockquote> for testimonials, key quotes, or "callout" boxes.
-                -   Use <ul> or <ol> for lists.
-                -   Use <strong> and <em> for emphasis.
-                -   **DO NOT** include the title or subtitle in the "content" field.
-            4.  **Key Takeaways**: Extract 3 distinct, punchy "Key Takeaways" from the text.
-            5.  **Comments**: Generate 4-7 realistic comments from women (ages 35-65) discussing the topic/product. They should sound natural, not like bots.
+            CRITICAL RULE: ** DO NOT REWRITE THE CONTENT.**
+            -   You must use the EXACT wording from the raw text.
+            - Do NOT summarize, do NOT "optimize", do NOT change the tone.
+            - Your ONLY job is to apply HTML tags and extract the structure.
+            
+            INSTRUCTIONS FOR PARSING:
+        1. ** Headline **: Identify the main headline(usually the first line).Extract it exactly.
+            2. ** Subheadline **: Identify the subheadline(usually the second line).Extract it exactly.
+            3. ** Body Content **:
+        -   Take the rest of the text and format it as clean, semantic HTML.
+                - Use<h2> for major section breaks.
+                - Use<h3> for sub - sections.
+                - Use<blockquote> for testimonials, key quotes, or "callout" boxes.
+                - Use < ul > or<ol> for lists.
+                - Use < strong > and<em> for emphasis.
+                -   ** DO NOT ** include the title or subtitle in the "content" field.
+                -   ** DO NOT CHANGE A SINGLE WORD OF THE BODY TEXT.**
+            4. ** Key Takeaways **: Extract 3 distinct, punchy "Key Takeaways" from the text. (You may summarize here, but keep it close to the text).
+            5. ** Comments **: Generate 4 - 7 realistic comments from women(ages 35 - 65) discussing the topic / product.They should sound natural, not like bots.
 
             OUTPUT JSON SCHEMA:
-            {
-                "title": "The Main Headline",
-                "subtitle": "The Subheadline",
-                "author": "Female Name (e.g. Sarah Jenkins)",
-                "reviewer": "Medical Doctor Name (e.g. Dr. A. Peterson, MD)",
-                "date": "Updated: 2 hours ago",
-                "content": "<p>First paragraph...</p>...",
-                "keyTakeaways": [
-                    { "title": "Short Title", "content": "One sentence summary" }
-                ],
-                "comments": [
-                    {
-                        "id": "c1",
-                        "author": "Name",
-                        "avatar": "https://picsum.photos/seed/c1/100",
-                        "content": "Comment text",
-                        "time": "2h",
-                        "likes": 45,
-                        "hasReplies": false,
-                        "isLiked": true
-                    }
-                ]
-            }
+        {
+            "title": "The Main Headline (Exact Match)",
+                "subtitle": "The Subheadline (Exact Match)",
+                    "author": "Female Name (e.g. Sarah Jenkins)",
+                        "reviewer": "Medical Doctor Name (e.g. Dr. A. Peterson, MD)",
+                            "date": "Updated: 2 hours ago",
+                                "content": "<p>First paragraph...</p>...",
+                                    "keyTakeaways": [
+                                        { "title": "Short Title", "content": "One sentence summary" }
+                                    ],
+                                        "comments": [
+                                            {
+                                                "id": "c1",
+                                                "author": "Name",
+                                                "avatar": "https://picsum.photos/seed/c1/100",
+                                                "content": "Comment text",
+                                                "time": "2h",
+                                                "likes": 45,
+                                                "hasReplies": false,
+                                                "isLiked": true
+                                            }
+                                        ]
+        }
 
             RAW TEXT:
             ${rawText}
@@ -113,7 +119,7 @@ export async function POST(request: Request) {
         // Check if slug exists and append random string if so (only if auto-generated or collision)
         let finalSlug = slug;
         if (articles.some((a: any) => a.slug === finalSlug)) {
-            finalSlug = `${slug}-${Math.random().toString(36).substring(7)}`;
+            finalSlug = `${slug} -${Math.random().toString(36).substring(7)} `;
             newArticle.slug = finalSlug;
             newArticle.id = finalSlug;
         }

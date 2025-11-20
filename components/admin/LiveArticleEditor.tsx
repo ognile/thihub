@@ -308,8 +308,17 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                 {/* Editable Key Takeaways */}
                 {article.keyTakeaways && article.keyTakeaways.length > 0 && (
                     <div className="bg-blue-50/50 border-l-4 border-[#0F4C81] p-6 my-8 rounded-r-lg shadow-sm group relative">
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
                             <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Editable Section</span>
+                            <button
+                                onClick={() => setArticle({ ...article, keyTakeaways: undefined })}
+                                className="bg-red-100 hover:bg-red-200 text-red-600 p-1 rounded transition-colors"
+                                title="Remove Section"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
                         </div>
                         <h3 className="flex items-center gap-2 text-[#0F4C81] font-bold text-lg uppercase tracking-wide mb-4 font-sans">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
