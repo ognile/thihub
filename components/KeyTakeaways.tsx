@@ -1,6 +1,19 @@
 import React from 'react';
 
-export default function KeyTakeaways() {
+interface KeyTakeawayItem {
+    title: string;
+    content: string;
+}
+
+interface KeyTakeawaysProps {
+    items?: KeyTakeawayItem[];
+}
+
+export default function KeyTakeaways({ items }: KeyTakeawaysProps) {
+    if (!items || items.length === 0) {
+        return null;
+    }
+
     return (
         <div className="bg-blue-50/50 border-l-4 border-[#0F4C81] p-6 my-8 rounded-r-lg shadow-sm">
             <h3 className="flex items-center gap-2 text-[#0F4C81] font-bold text-lg uppercase tracking-wide mb-4 font-sans">
@@ -10,18 +23,12 @@ export default function KeyTakeaways() {
                 Key Takeaways
             </h3>
             <ul className="space-y-3">
-                <li className="flex items-start gap-3 text-gray-800 font-sans text-[15px] leading-relaxed">
-                    <span className="mt-1.5 w-1.5 h-1.5 bg-[#0F4C81] rounded-full flex-shrink-0"></span>
-                    <span><strong>Metabolic Hibernation:</strong> Drastic calorie cutting can trigger a survival mode that halts fat burning.</span>
-                </li>
-                <li className="flex items-start gap-3 text-gray-800 font-sans text-[15px] leading-relaxed">
-                    <span className="mt-1.5 w-1.5 h-1.5 bg-[#0F4C81] rounded-full flex-shrink-0"></span>
-                    <span><strong>The 5-Second Ritual:</strong> A specific morning nutrient combination can signal safety to the body and reactivate metabolism.</span>
-                </li>
-                <li className="flex items-start gap-3 text-gray-800 font-sans text-[15px] leading-relaxed">
-                    <span className="mt-1.5 w-1.5 h-1.5 bg-[#0F4C81] rounded-full flex-shrink-0"></span>
-                    <span><strong>Clinical Evidence:</strong> Studies suggest this method may increase metabolic rate significantly within the first hour of waking.</span>
-                </li>
+                {items.map((item, index) => (
+                    <li key={index} className="flex items-start gap-3 text-gray-800 font-sans text-[15px] leading-relaxed">
+                        <span className="mt-1.5 w-1.5 h-1.5 bg-[#0F4C81] rounded-full flex-shrink-0"></span>
+                        <span><strong>{item.title}:</strong> {item.content}</span>
+                    </li>
+                ))}
             </ul>
         </div>
     );

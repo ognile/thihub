@@ -118,7 +118,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
                 </div>
 
                 {/* Key Takeaways */}
-                <KeyTakeaways />
+                <KeyTakeaways items={article.keyTakeaways} />
 
                 {/* Article Content */}
                 <article className="prose prose-lg max-w-none text-gray-800 font-serif leading-loose">
@@ -138,7 +138,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
                 {/* Facebook Comments Section */}
                 <div className="font-sans border-t border-gray-200 pt-10">
                     <h3 className="text-xl font-bold text-gray-900 mb-6">Discussion</h3>
-                    <FBComments />
+                    <FBComments comments={article.comments} />
                 </div>
             </main>
         </div>

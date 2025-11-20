@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 
-interface CommentProps {
+export interface CommentData {
+    id: string;
     author: string;
     avatar: string;
     content: string;
@@ -11,6 +12,8 @@ interface CommentProps {
     hasReplies?: boolean;
     isLiked?: boolean;
 }
+
+interface CommentProps extends CommentData { }
 
 const Comment = ({ author, avatar, content, time, likes: initialLikes, hasReplies, isLiked: initialIsLiked }: CommentProps) => {
     const [likes, setLikes] = useState(initialLikes);
@@ -91,7 +94,25 @@ const Comment = ({ author, avatar, content, time, likes: initialLikes, hasReplie
     );
 };
 
-export default function FBComments() {
+interface FBCommentsProps {
+    comments?: CommentData[];
+}
+
+export default function FBComments({ comments = [] }: FBCommentsProps) {
+    if (!comments || comments.length === 0) {
+        return (
+            <div className="bg-white p-4 border-t border-gray-200 mt-8 font-sans">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-[#050505] text-lg font-sans">Comments</h3>
+                </div>
+                <p className="text-gray-500 text-sm italic">No comments yet.</p>
+                <div className="mt-4 text-center text-[#65676B] text-[13px]">
+                    Facebook Comments Plugin
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="bg-white p-4 border-t border-gray-200 mt-8 font-sans">
             <div className="flex items-center justify-between mb-4">
@@ -105,39 +126,9 @@ export default function FBComments() {
             </div>
 
             <div className="space-y-1">
-                <Comment
-                    author="Sarah Jenkins"
-                    avatar="https://picsum.photos/seed/sarah/100"
-                    content="I was skeptical at first because I've tried so many 'miracle' cures, but my doctor actually recommended this approach. It's been 2 weeks and the difference is night and day."
-                    time="2h"
-                    likes={45}
-                    hasReplies={true}
-                    isLiked={true}
-                />
-
-                <Comment
-                    author="Michael Ross"
-                    avatar="https://picsum.photos/seed/mike/100"
-                    content="Finally an article that cites actual sources instead of just rumors. Thank you for the detailed breakdown!"
-                    time="5h"
-                    likes={128}
-                />
-
-                <Comment
-                    author="Jennifer Wu"
-                    avatar="https://picsum.photos/seed/jen/100"
-                    content="Has anyone tried the morning routine mentioned in paragraph 3? Wondering if I can swap the tea for coffee."
-                    time="1d"
-                    likes={12}
-                />
-
-                <Comment
-                    author="David Miller"
-                    avatar="https://picsum.photos/seed/dave/100"
-                    content="Just shared this with my family group chat. This is exactly what we were talking about last Sunday."
-                    time="1d"
-                    likes={8}
-                />
+                {comments.map((comment) => (
+                    <Comment key={comment.id} {...comment} />
+                ))}
             </div>
 
             <div className="mt-4 pt-2 text-center">

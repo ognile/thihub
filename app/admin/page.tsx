@@ -1,253 +1,301 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import CommentEditor from '@/components/admin/CommentEditor';
+import { CommentData } from '@/components/FBComments';
 
 interface ArticleConfig {
     pixelId: string;
     ctaUrl: string;
 }
 
+interface Article {
+    id: string;
+    slug: string;
+    title: string;
+    comments?: CommentData[];
+}
+
 interface Config {
     defaultPixelId: string;
     defaultCtaUrl: string;
-    articles: Record<string, ArticleConfig>;
-}
-
-interface Article {
-    slug: string;
-    title: string;
+    articles: Record<string, ArticleConfig | string>;
 }
 
 export default function AdminDashboard() {
-    const [config, setConfig] = useState<Config>({ defaultPixelId: '', defaultCtaUrl: '', articles: {} });
-    const [availableArticles, setAvailableArticles] = useState<Article[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [newSlug, setNewSlug] = useState('');
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [config, setConfig] = useState<Config | null>(null);
+    const [articles, setArticles] = useState<Article[]>([]);
+    const [selectedArticle, setSelectedArticle] = useState<string | null>(null);
+    const [saveStatus, setSaveStatus] = useState('');
     const router = useRouter();
 
     useEffect(() => {
-        Promise.all([
-            fetch('/api/config').then((res) => res.json()),
-            fetch('/api/articles').then((res) => res.json())
-        ])
-            .then(([configData, articlesData]) => {
-                // Migration check: if old config format, adapt it
-                if (configData.default && !configData.defaultPixelId) {
+        checkAuth();
+        fetchConfig();
+        fetchArticles();
+    }, []);
+
+    const checkAuth = async () => {
+        try {
+            setIsAuthenticated(true);
+        } catch (e) {
+            router.push('/admin/login');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const fetchConfig = async () => {
+        try {
+            const res = await fetch('/api/config');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.default && !data.defaultPixelId) {
                     const migratedConfig: Config = {
-                        defaultPixelId: configData.default,
+                        defaultPixelId: data.default,
                         defaultCtaUrl: 'https://mynuora.com/products/feminine-balance-gummies-1',
                         articles: {}
                     };
-                    // Migrate old article structure if needed (simple string to object)
-                    Object.entries(configData.articles || {}).forEach(([slug, val]) => {
+                    Object.entries(data.articles || {}).forEach(([slug, val]) => {
                         if (typeof val === 'string') {
                             migratedConfig.articles[slug] = { pixelId: val, ctaUrl: '' };
+                        } else {
+                            migratedConfig.articles[slug] = val as ArticleConfig;
                         }
                     });
                     setConfig(migratedConfig);
                 } else {
-                    setConfig(configData);
+                    setConfig(data);
                 }
-                setAvailableArticles(articlesData);
-                setLoading(false);
-            })
-            .catch(() => setLoading(false));
-    }, []);
-
-    const saveConfig = async (newConfig: Config) => {
-        setConfig(newConfig);
-        await fetch('/api/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newConfig),
-        });
-    };
-
-    const handleGlobalChange = (key: 'defaultPixelId' | 'defaultCtaUrl', value: string) => {
-        saveConfig({ ...config, [key]: value });
-    };
-
-    const handleArticleChange = (slug: string, key: 'pixelId' | 'ctaUrl', value: string) => {
-        const currentArticleConfig = config.articles[slug] || { pixelId: '', ctaUrl: '' };
-        const newArticles = {
-            ...config.articles,
-            [slug]: { ...currentArticleConfig, [key]: value }
-        };
-        saveConfig({ ...config, articles: newArticles });
-    };
-
-    const handleAddArticle = () => {
-        if (newSlug) {
-            // Initialize with empty overrides
-            const newArticles = { ...config.articles, [newSlug]: { pixelId: '', ctaUrl: '' } };
-            saveConfig({ ...config, articles: newArticles });
-            setNewSlug('');
+            }
+        } catch (e) {
+            console.error('Failed to fetch config', e);
         }
     };
 
-    const handleDeleteArticle = (slug: string) => {
-        const newArticles = { ...config.articles };
-        delete newArticles[slug];
-        saveConfig({ ...config, articles: newArticles });
+    const fetchArticles = async () => {
+        try {
+            const res = await fetch('/api/articles');
+            if (res.ok) {
+                const data = await res.json();
+                setArticles(data);
+            }
+        } catch (e) {
+            console.error('Failed to fetch articles', e);
+        }
     };
 
     const handleLogout = async () => {
-        document.cookie = "auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+        await fetch('/api/auth/login', { method: 'DELETE' });
         router.push('/admin/login');
     };
 
-    if (loading) return <div className="p-8 flex justify-center text-gray-500">Loading configuration...</div>;
+    const handleSaveConfig = async () => {
+        if (!config) return;
+        setSaveStatus('Saving config...');
+        try {
+            const res = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config),
+            });
+            if (res.ok) {
+                setSaveStatus('Config saved!');
+                setTimeout(() => setSaveStatus(''), 2000);
+            } else {
+                setSaveStatus('Error saving config');
+            }
+        } catch (e) {
+            setSaveStatus('Error saving config');
+        }
+    };
 
-    // Merge available articles with configured overrides to show a complete list
-    const allSlugs = Array.from(new Set([
-        ...availableArticles.map(a => a.slug),
-        ...Object.keys(config.articles)
-    ]));
+    const handleSaveComments = async (slug: string, comments: CommentData[]) => {
+        setSaveStatus('Saving comments...');
+        try {
+            const res = await fetch('/api/articles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slug, comments }),
+            });
+
+            if (res.ok) {
+                setSaveStatus('Comments saved!');
+                setArticles(articles.map(a => a.slug === slug ? { ...a, comments } : a));
+                setTimeout(() => setSaveStatus(''), 2000);
+            } else {
+                setSaveStatus('Error saving comments');
+            }
+        } catch (e) {
+            setSaveStatus('Error saving comments');
+        }
+    };
+
+    const updateGlobalConfig = (key: 'defaultPixelId' | 'defaultCtaUrl', value: string) => {
+        if (config) {
+            setConfig({ ...config, [key]: value });
+        }
+    };
+
+    const updateArticleConfig = (slug: string, key: 'pixelId' | 'ctaUrl', value: string) => {
+        if (!config) return;
+        const currentArticleConfig = config.articles?.[slug];
+
+        const newArticleConfig: ArticleConfig = typeof currentArticleConfig === 'string'
+            ? { pixelId: currentArticleConfig, ctaUrl: '', [key]: value }
+            : { pixelId: '', ctaUrl: '', ...(currentArticleConfig as ArticleConfig), [key]: value };
+
+        setConfig({
+            ...config,
+            articles: {
+                ...config.articles,
+                [slug]: newArticleConfig
+            }
+        });
+    };
+
+    const getArticleConfigValue = (slug: string, key: 'pixelId' | 'ctaUrl') => {
+        const articleConfig = config?.articles?.[slug];
+        if (!articleConfig) return '';
+        if (typeof articleConfig === 'string') return key === 'pixelId' ? articleConfig : '';
+        return articleConfig[key] || '';
+    };
+
+    if (isLoading) return <div className="p-10 text-center">Loading...</div>;
+    if (!isAuthenticated) return null;
+
+    const selectedArticleData = articles.find(a => a.slug === selectedArticle);
 
     return (
         <div className="min-h-screen bg-gray-50 font-sans">
-            <nav className="bg-white shadow-sm border-b border-gray-200">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between h-16">
-                        <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">A</div>
-                            <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <button onClick={() => router.push('/')} className="text-gray-500 hover:text-gray-900 text-sm font-medium">View Site</button>
-                            <button onClick={handleLogout} className="text-red-600 hover:text-red-800 text-sm font-medium">Logout</button>
-                        </div>
-                    </div>
-                </div>
+            <nav className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+                <h1 className="text-xl font-bold text-gray-800">Admin Dashboard</h1>
+                <button onClick={handleLogout} className="text-sm text-red-600 hover:text-red-800 font-medium">Logout</button>
             </nav>
 
-            <main className="max-w-5xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
-
-                {/* Global Config */}
-                <div className="bg-white shadow-sm rounded-xl border border-gray-200 mb-8 overflow-hidden">
-                    <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/50">
-                        <h3 className="text-lg font-bold text-gray-900">Global Configuration</h3>
-                        <p className="mt-1 text-sm text-gray-500">These settings apply to all articles unless overridden.</p>
+            <main className="max-w-6xl mx-auto p-6">
+                {/* Global Settings */}
+                <div className="bg-white rounded-xl shadow-sm p-6 mb-8 border border-gray-100">
+                    <h2 className="text-lg font-bold text-gray-800 mb-4">Global Defaults</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-600 mb-1">Default Pixel ID</label>
+                            <input
+                                type="text"
+                                value={config?.defaultPixelId || ''}
+                                onChange={(e) => updateGlobalConfig('defaultPixelId', e.target.value)}
+                                className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-600 mb-1">Default CTA URL</label>
+                            <input
+                                type="text"
+                                value={config?.defaultCtaUrl || ''}
+                                onChange={(e) => updateGlobalConfig('defaultCtaUrl', e.target.value)}
+                                className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
                     </div>
-                    <div className="p-6 grid sm:grid-cols-2 gap-6">
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-2">Default Pixel ID</label>
-                            <input
-                                type="text"
-                                value={config.defaultPixelId}
-                                onChange={(e) => handleGlobalChange('defaultPixelId', e.target.value)}
-                                className="block w-full rounded-lg border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2.5 border"
-                                placeholder="e.g. 1234567890"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-2">Default CTA URL</label>
-                            <input
-                                type="text"
-                                value={config.defaultCtaUrl}
-                                onChange={(e) => handleGlobalChange('defaultCtaUrl', e.target.value)}
-                                className="block w-full rounded-lg border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2.5 border"
-                                placeholder="https://..."
-                            />
-                        </div>
+                    <div className="mt-4 flex justify-end">
+                        <button
+                            onClick={handleSaveConfig}
+                            className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                        >
+                            Save Global Config
+                        </button>
                     </div>
                 </div>
 
                 {/* Article Management */}
-                <div className="bg-white shadow-sm rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-                        <div>
-                            <h3 className="text-lg font-bold text-gray-900">Article Management</h3>
-                            <p className="mt-1 text-sm text-gray-500">Manage Pixel IDs and CTA URLs for your articles.</p>
-                        </div>
-                        <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
-                            {allSlugs.length} Articles Found
-                        </span>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                        <h2 className="text-lg font-bold text-gray-800">Article Management</h2>
+                        {saveStatus && <span className="text-green-600 font-medium text-sm animate-pulse">{saveStatus}</span>}
                     </div>
 
-                    <div className="divide-y divide-gray-100">
-                        {allSlugs.length === 0 && (
-                            <div className="p-8 text-center text-gray-500 italic">
-                                No articles found in database or configuration.
-                            </div>
-                        )}
-
-                        {allSlugs.map((slug) => {
-                            const article = availableArticles.find(a => a.slug === slug);
-                            const articleConfig = config.articles[slug];
-                            const isOverridden = !!articleConfig;
-
-                            const pixelId = articleConfig?.pixelId || '';
-                            const ctaUrl = articleConfig?.ctaUrl || '';
-
-                            return (
-                                <div key={slug} className={`p-4 sm:p-6 flex flex-col gap-4 transition-colors ${isOverridden ? 'bg-blue-50/30' : 'hover:bg-gray-50'}`}>
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <div className="font-bold text-gray-900">{article ? article.title : slug}</div>
-                                            <div className="font-mono text-xs text-gray-500 mt-1">{slug}</div>
-                                            {!article && <span className="text-xs text-amber-600 font-medium mt-1 inline-block">⚠ Not in DB (Config only)</span>}
+                    <div className="grid grid-cols-1 md:grid-cols-3 min-h-[600px]">
+                        {/* Article List Sidebar */}
+                        <div className="border-r border-gray-100 bg-gray-50/50 p-4">
+                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Articles</h3>
+                            <div className="space-y-2">
+                                {articles.map(article => (
+                                    <div
+                                        key={article.slug}
+                                        onClick={() => setSelectedArticle(article.slug)}
+                                        className={`p-3 rounded-lg cursor-pointer transition-all ${selectedArticle === article.slug
+                                            ? 'bg-white shadow-md border border-blue-100 ring-1 ring-blue-500'
+                                            : 'hover:bg-white hover:shadow-sm border border-transparent'
+                                            }`}
+                                    >
+                                        <div className="font-medium text-gray-900 text-sm truncate">{article.title}</div>
+                                        <div className="text-xs text-gray-500 mt-1 flex justify-between">
+                                            <span>/{article.slug}</span>
+                                            <span className="bg-gray-200 px-1.5 rounded text-[10px]">{article.comments?.length || 0} comments</span>
                                         </div>
-                                        {isOverridden && (
-                                            <button
-                                                onClick={() => handleDeleteArticle(slug)}
-                                                className="text-red-600 hover:text-red-900 text-xs font-bold px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                                            >
-                                                Reset to Default
-                                            </button>
-                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Editor Area */}
+                        <div className="col-span-2 p-6 bg-white">
+                            {selectedArticle && selectedArticleData ? (
+                                <div className="space-y-8">
+                                    {/* Config Section */}
+                                    <div className="bg-gray-50 p-5 rounded-xl border border-gray-100">
+                                        <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                            Tracking & CTA Configuration
+                                        </h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-500 mb-1">Pixel ID Override</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder={`Default: ${config?.defaultPixelId}`}
+                                                    value={getArticleConfigValue(selectedArticle, 'pixelId')}
+                                                    onChange={(e) => updateArticleConfig(selectedArticle, 'pixelId', e.target.value)}
+                                                    className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-500 mb-1">CTA URL Override</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder={`Default: ${config?.defaultCtaUrl}`}
+                                                    value={getArticleConfigValue(selectedArticle, 'ctaUrl')}
+                                                    onChange={(e) => updateArticleConfig(selectedArticle, 'ctaUrl', e.target.value)}
+                                                    className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="mt-3 flex justify-end">
+                                            <button onClick={handleSaveConfig} className="text-xs text-blue-600 hover:underline font-medium">Save Configuration</button>
+                                        </div>
                                     </div>
 
-                                    <div className="grid sm:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
-                                                Pixel ID {isOverridden && pixelId ? '(Overridden)' : '(Default)'}
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={pixelId}
-                                                placeholder={config.defaultPixelId}
-                                                onChange={(e) => handleArticleChange(slug, 'pixelId', e.target.value)}
-                                                className={`block w-full rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-1.5 border ${isOverridden && pixelId ? 'border-blue-300 bg-white' : 'border-gray-300 bg-gray-50 text-gray-500'}`}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
-                                                CTA URL {isOverridden && ctaUrl ? '(Overridden)' : '(Default)'}
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={ctaUrl}
-                                                placeholder={config.defaultCtaUrl}
-                                                onChange={(e) => handleArticleChange(slug, 'ctaUrl', e.target.value)}
-                                                className={`block w-full rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-1.5 border ${isOverridden && ctaUrl ? 'border-blue-300 bg-white' : 'border-gray-300 bg-gray-50 text-gray-500'}`}
-                                            />
-                                        </div>
+                                    {/* Comments Editor */}
+                                    <div>
+                                        <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                                            Comments Manager
+                                        </h3>
+                                        <CommentEditor
+                                            comments={selectedArticleData.comments || []}
+                                            onChange={(newComments) => handleSaveComments(selectedArticle, newComments)}
+                                        />
                                     </div>
                                 </div>
-                            );
-                        })}
-
-                        {/* Add Manual Override (for testing or hidden articles) */}
-                        <div className="p-4 sm:p-6 bg-gray-50 border-t border-gray-100">
-                            <h4 className="text-sm font-bold text-gray-700 mb-3">Add Manual Override (Advanced)</h4>
-                            <div className="flex flex-col sm:flex-row gap-3">
-                                <input
-                                    type="text"
-                                    placeholder="Slug (e.g. hidden-page)"
-                                    value={newSlug}
-                                    onChange={(e) => setNewSlug(e.target.value)}
-                                    className="flex-1 rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2.5 border"
-                                />
-                                <button
-                                    onClick={handleAddArticle}
-                                    disabled={!newSlug}
-                                    className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-bold rounded-md text-white bg-gray-600 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    Add
-                                </button>
-                            </div>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                                    <svg className="w-16 h-16 mb-4 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" /></svg>
+                                    <p>Select an article to edit settings and comments</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
