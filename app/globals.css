@@ -36,13 +36,13 @@ h6 {
 }
 
 .prose h3 {
-  font-family: var(--font-sans);
-  font-weight: 800;
+  font-family: var(--font-serif);
+  font-weight: 700;
   color: #111827;
   margin-top: 2.5em;
   margin-bottom: 1em;
   font-size: 24px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 .prose blockquote {

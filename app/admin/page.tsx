@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import CommentEditor from '@/components/admin/CommentEditor';
 import { CommentData } from '@/components/FBComments';
 
@@ -334,7 +335,22 @@ export default function AdminDashboard() {
                                                 }}
                                                 className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-3"
                                             />
-
+                                            <div className="flex items-center gap-3 mb-4">
+                                                <a
+                                                    href={`/articles/${selectedArticle}`}
+                                                    target="_blank"
+                                                    className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                                                >
+                                                    View Live <span className="text-xs">↗</span>
+                                                </a>
+                                                <Link
+                                                    href={`/admin/articles/${selectedArticle}`}
+                                                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-sm"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                                    Open Visual Editor
+                                                </Link>
+                                            </div>
                                             <div className="flex justify-end">
                                                 <button
                                                     onClick={() => handleSaveComments(
