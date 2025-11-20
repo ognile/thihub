@@ -7,59 +7,24 @@ import PixelTracker from '@/components/PixelTracker';
 import UrlPreserver from '@/components/UrlPreserver';
 import CinematicHero from '@/components/CinematicHero';
 import Link from 'next/link';
-import fs from 'fs';
-import path from 'path';
 import { notFound } from 'next/navigation';
 
-// Helper to get article config
-function getArticleConfig(slug: string) {
-    try {
-        const configPath = path.join(process.cwd(), 'data', 'pixel-config.json');
-        if (fs.existsSync(configPath)) {
-            const fileContents = fs.readFileSync(configPath, 'utf8');
-            const config = JSON.parse(fileContents);
-
-            // Handle both old and new config structures for backward compatibility during dev
-            const defaultPixelId = config.defaultPixelId || config.default || '1213472546398709';
-            const defaultCtaUrl = config.defaultCtaUrl || 'https://mynuora.com/products/feminine-balance-gummies-1';
-
-            const articleConfig = config.articles?.[slug];
-
-            // Check if articleConfig is object (new) or string (old)
-            let pixelId = defaultPixelId;
-            let ctaUrl = defaultCtaUrl;
-
-            if (articleConfig) {
-                if (typeof articleConfig === 'string') {
-                    pixelId = articleConfig;
-                } else {
-                    pixelId = articleConfig.pixelId || defaultPixelId;
-                    ctaUrl = articleConfig.ctaUrl || defaultCtaUrl;
-                }
-            }
-
-            return { pixelId, ctaUrl };
-        }
-    } catch (e) {
-        console.error('Error reading pixel config:', e);
-    }
-    return {
-        pixelId: '1213472546398709',
-        ctaUrl: 'https://mynuora.com/products/feminine-balance-gummies-1'
-    };
-}
-
-// Get article from JSON database
+// Get article from API (which handles both local files and Blob storage)
 async function getArticle(slug: string) {
     try {
-        const articlesPath = path.join(process.cwd(), 'data', 'articles.json');
-        if (fs.existsSync(articlesPath)) {
-            const fileContents = fs.readFileSync(articlesPath, 'utf8');
-            const articles = JSON.parse(fileContents);
-            return articles.find((a: any) => a.slug === slug) || null;
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+        const response = await fetch(`${baseUrl}/api/articles`, {
+            cache: 'no-store'
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch articles');
         }
+
+        const articles = await response.json();
+        return articles.find((a: any) => a.slug === slug) || null;
     } catch (e) {
-        console.error('Error reading articles database:', e);
+        console.error('Error fetching article:', e);
     }
     return null;
 }
@@ -72,7 +37,9 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
         notFound();
     }
 
-    const { pixelId, ctaUrl } = getArticleConfig(slug);
+    // Use pixel/CTA from article data (set during generation/editing)
+    const pixelId = article.pixelId || '1213472546398709';
+    const ctaUrl = article.ctaUrl || 'https://mynuora.com/products/feminine-balance-gummies-1';
 
     return (
         <div className="min-h-screen bg-white pb-20 font-serif selection:bg-blue-100 selection:text-blue-900">
