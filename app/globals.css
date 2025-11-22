@@ -35,6 +35,19 @@ h6 {
   color: #292929;
 }
 
+/* Fix H2 Sizing - Make it larger than H3 */
+.prose h2 {
+  font-family: var(--font-serif);
+  font-weight: 800;
+  color: #111827;
+  margin-top: 2em;
+  margin-bottom: 0.8em;
+  font-size: 32px;
+  /* Larger than H3 (24px) */
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
 .prose h3 {
   font-family: var(--font-serif);
   font-weight: 700;
@@ -43,6 +56,7 @@ h6 {
   margin-bottom: 1em;
   font-size: 24px;
   letter-spacing: -0.01em;
+  line-height: 1.4;
 }
 
 .prose blockquote {
@@ -54,6 +68,8 @@ h6 {
   color: #374151;
   border-radius: 0 8px 8px 0;
   margin: 2.5em 0;
+  font-size: 20px;
+  font-family: var(--font-serif);
 }
 
 .prose blockquote p:last-child {
@@ -69,4 +85,36 @@ h6 {
   border-radius: 8px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   margin: 2em 0;
+}
+
+/* Important Update Component */
+.important-update {
+  background-color: #FEF2F2;
+  /* Red-50 */
+  border: 1px solid #FECACA;
+  /* Red-200 */
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  margin: 2.5em 0;
+  position: relative;
+}
+
+.important-update::before {
+  content: "IMPORTANT UPDATE";
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #DC2626;
+  /* Red-600 */
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+  font-family: var(--font-sans);
+}
+
+.important-update p {
+  margin-bottom: 0;
+  font-size: 18px;
+  color: #7F1D1D;
+  /* Red-900 */
+  font-weight: 500;
 }
