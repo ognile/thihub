@@ -1,52 +1,29 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
-import { put, head } from '@vercel/blob';
-
-const articlesPath = path.join(process.cwd(), 'data', 'articles.json');
-const BLOB_URL = 'articles.json';
-const isProduction = process.env.VERCEL_ENV === 'production';
-
-async function getArticles() {
-    if (isProduction) {
-        try {
-            const blobExists = await head(BLOB_URL).catch(() => null);
-            if (blobExists) {
-                const response = await fetch(blobExists.url);
-                return await response.json();
-            }
-            return [];
-        } catch (e) {
-            console.error('Error reading from blob:', e);
-            return [];
-        }
-    } else {
-        if (fs.existsSync(articlesPath)) {
-            const fileContents = fs.readFileSync(articlesPath, 'utf8');
-            return JSON.parse(fileContents);
-        }
-        return [];
-    }
-}
-
-async function saveArticles(articles: any[]) {
-    if (isProduction) {
-        await put(BLOB_URL, JSON.stringify(articles, null, 4), {
-            access: 'public',
-            contentType: 'application/json',
-            addRandomSuffix: false,
-            allowOverwrite: true,
-        });
-    } else {
-        fs.writeFileSync(articlesPath, JSON.stringify(articles, null, 4));
-    }
-}
 
 export async function GET() {
     try {
-        const articles = await getArticles();
-        return NextResponse.json(articles);
+        const supabase = await createClient();
+        const { data: articles, error } = await supabase
+            .from('articles')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Transform snake_case to camelCase for frontend compatibility
+        const mappedArticles = articles.map(a => ({
+            ...a,
+            ctaText: a.cta_text,
+            ctaTitle: a.cta_title,
+            ctaDescription: a.cta_description,
+            pixelId: a.pixel_id,
+            ctaUrl: a.cta_url,
+            keyTakeaways: a.key_takeaways
+        }));
+
+        return NextResponse.json(mappedArticles);
     } catch (e) {
         console.error('Error reading articles:', e);
         return NextResponse.json({ error: 'Failed to read articles' }, { status: 500 });
@@ -55,54 +32,87 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
+        const supabase = await createClient();
+
+        // Check authentication
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
-        const { slug, comments, ctaText, ctaTitle, ctaDescription, title, subtitle, content, author, reviewer, date, image, keyTakeaways } = body;
+        const { slug, comments, ctaText, ctaTitle, ctaDescription, title, subtitle, content, author, reviewer, date, image, keyTakeaways, pixelId, ctaUrl } = body;
 
         if (!slug) {
             return NextResponse.json({ error: 'Slug is required' }, { status: 400 });
         }
 
-        let articles = await getArticles();
+        // Prepare update object
+        const updateData: any = {
+            updated_at: new Date().toISOString()
+        };
 
-        const articleIndex = articles.findIndex((a: any) => a.slug === slug);
+        if (title) updateData.title = title;
+        if (subtitle) updateData.subtitle = subtitle;
+        if (content) updateData.content = content;
+        if (author) updateData.author = author;
+        if (reviewer) updateData.reviewer = reviewer;
+        if (date) updateData.date = date;
+        if (image) updateData.image = image;
+        if (ctaText) updateData.cta_text = ctaText;
+        if (ctaTitle) updateData.cta_title = ctaTitle;
+        if (ctaDescription) updateData.cta_description = ctaDescription;
+        if (pixelId) updateData.pixel_id = pixelId;
+        if (ctaUrl) updateData.cta_url = ctaUrl;
+        if (keyTakeaways !== undefined) updateData.key_takeaways = keyTakeaways;
+        if (comments) updateData.comments = comments;
 
-        if (articleIndex !== -1) {
-            // Update fields if provided
-            if (comments) articles[articleIndex].comments = comments;
-            if (ctaText) articles[articleIndex].ctaText = ctaText;
-            if (ctaTitle) articles[articleIndex].ctaTitle = ctaTitle;
-            if (ctaDescription) articles[articleIndex].ctaDescription = ctaDescription;
-            if (title) articles[articleIndex].title = title;
-            if (subtitle) articles[articleIndex].subtitle = subtitle;
-            if (content) articles[articleIndex].content = content;
-            if (author) articles[articleIndex].author = author;
-            if (reviewer) articles[articleIndex].reviewer = reviewer;
-            if (date) articles[articleIndex].date = date;
-            if (image) articles[articleIndex].image = image;
+        // Check if article exists
+        const { data: existing } = await supabase
+            .from('articles')
+            .select('id')
+            .eq('slug', slug)
+            .single();
 
-            // Explicitly handle keyTakeaways (allow null to remove)
-            if (keyTakeaways !== undefined) {
-                articles[articleIndex].keyTakeaways = keyTakeaways;
-            }
-
-            await saveArticles(articles);
-
-            // Revalidate the article page
-            revalidatePath(`/articles/${slug}`);
-
-            return NextResponse.json({ success: true });
+        let error;
+        if (existing) {
+            // Update
+            const { error: updateError } = await supabase
+                .from('articles')
+                .update(updateData)
+                .eq('slug', slug);
+            error = updateError;
         } else {
-            return NextResponse.json({ error: 'Article not found' }, { status: 404 });
+            // Insert
+            updateData.slug = slug;
+            const { error: insertError } = await supabase
+                .from('articles')
+                .insert(updateData);
+            error = insertError;
         }
+
+        if (error) throw error;
+
+        // Revalidate the article page
+        revalidatePath(`/articles/${slug}`);
+
+        return NextResponse.json({ success: true });
     } catch (e) {
         console.error('Error updating article:', e);
         return NextResponse.json({ error: 'Failed to update article' }, { status: 500 });
     }
 }
 
-
 export async function DELETE(request: Request) {
     try {
+        const supabase = await createClient();
+
+        // Check authentication
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const slug = searchParams.get('slug');
 
@@ -110,17 +120,14 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: 'Slug is required' }, { status: 400 });
         }
 
-        let articles = await getArticles();
-        const initialLength = articles.length;
-        articles = articles.filter((a: any) => a.slug !== slug);
+        const { error } = await supabase
+            .from('articles')
+            .delete()
+            .eq('slug', slug);
 
-        if (articles.length === initialLength) {
-            return NextResponse.json({ error: 'Article not found' }, { status: 404 });
-        }
+        if (error) throw error;
 
-        await saveArticles(articles);
-
-        // Revalidate the article page (it will be 404 now, but good to clear cache)
+        // Revalidate the article page
         revalidatePath(`/articles/${slug}`);
 
         return NextResponse.json({ success: true });

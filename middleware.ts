@@ -1,26 +1,19 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { type NextRequest } from 'next/server';
+import { updateSession } from '@/utils/supabase/middleware';
 
-export function middleware(request: NextRequest) {
-    // Check if the path starts with /admin
-    if (request.nextUrl.pathname.startsWith('/admin')) {
-        // Allow access to /admin/login
-        if (request.nextUrl.pathname === '/admin/login') {
-            return NextResponse.next();
-        }
-
-        // Check for auth_token cookie
-        const token = request.cookies.get('auth_token');
-
-        if (!token) {
-            // Redirect to login if no token
-            return NextResponse.redirect(new URL('/admin/login', request.url));
-        }
-    }
-
-    return NextResponse.next();
+export async function middleware(request: NextRequest) {
+    return await updateSession(request);
 }
 
 export const config = {
-    matcher: '/admin/:path*',
+    matcher: [
+        /*
+         * Match all request paths except for the ones starting with:
+         * - _next/static (static files)
+         * - _next/image (image optimization files)
+         * - favicon.ico (favicon file)
+         * Feel free to modify this pattern to include more paths.
+         */
+        '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    ],
 };
