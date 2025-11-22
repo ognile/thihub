@@ -54,13 +54,14 @@ const ImageNode = ({ node, updateAttributes, deleteNode }: any) => {
                 formData.append('file', file);
                 try {
                     const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                    if (!res.ok) throw new Error(await res.text());
                     const data = await res.json();
                     if (data.url) {
                         updateAttributes({ src: data.url });
                     }
                 } catch (err) {
                     console.error('Upload failed', err);
-                    alert('Failed to upload image');
+                    alert('Failed to upload image. Please check console for details.');
                 }
             }
         };
@@ -150,13 +151,14 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                 formData.append('file', file);
                 try {
                     const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                    if (!res.ok) throw new Error(await res.text());
                     const data = await res.json();
                     if (data.url) {
                         editor?.chain().focus().setImage({ src: data.url }).run();
                     }
                 } catch (err) {
                     console.error('Upload failed', err);
-                    alert('Failed to upload image');
+                    alert('Failed to upload image. Please check console for details.');
                 }
             }
         };
@@ -174,13 +176,14 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                 formData.append('file', file);
                 try {
                     const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                    if (!res.ok) throw new Error(await res.text());
                     const data = await res.json();
                     if (data.url) {
                         setArticle(prev => ({ ...prev, image: data.url }));
                     }
                 } catch (err) {
                     console.error('Upload failed', err);
-                    alert('Failed to upload image');
+                    alert('Failed to upload image. Please check console for details.');
                 }
             }
         };
