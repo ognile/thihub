@@ -148,20 +148,20 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
         },
     });
 
-    // Auto-resize textareas ONLY on mount
+    // Auto-resize textareas ONLY on mount - use requestAnimationFrame for reliable DOM measurement
     useEffect(() => {
-        const timer = setTimeout(() => {
-            if (titleRef.current) {
-                titleRef.current.style.height = 'auto';
-                titleRef.current.style.height = titleRef.current.scrollHeight + 'px';
-            }
-            if (subtitleRef.current) {
-                subtitleRef.current.style.height = 'auto';
-                subtitleRef.current.style.height = subtitleRef.current.scrollHeight + 'px';
-            }
-        }, 100);
-
-        return () => clearTimeout(timer);
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                if (titleRef.current) {
+                    titleRef.current.style.height = 'auto';
+                    titleRef.current.style.height = titleRef.current.scrollHeight + 'px';
+                }
+                if (subtitleRef.current) {
+                    subtitleRef.current.style.height = 'auto';
+                    subtitleRef.current.style.height = subtitleRef.current.scrollHeight + 'px';
+                }
+            }, 50);
+        });
     }, []); // Empty deps - only on mount
 
     const addImage = useCallback(async () => {
@@ -395,22 +395,22 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                                                         <div className="w-10 h-10 rounded-full ring-2 ring-white/30 p-0.5 bg-black/20 backdrop-blur-sm flex-shrink-0">
                                                             <img src="https://picsum.photos/seed/doc/100" alt="Author" className="w-full h-full rounded-full object-cover" />
                                                         </div>
-                                                        <div className="flex flex-col">
+                                                        <div className="flex flex-col min-w-0 flex-1">
                                                             <div className="flex items-center gap-2">
                                                                 <input
                                                                     type="text"
                                                                     value={article.author}
                                                                     onChange={(e) => setArticle(prev => ({ ...prev, author: e.target.value }))}
-                                                                    className="text-white font-bold text-xs tracking-wide bg-transparent border-none focus:ring-0 focus:outline-none p-0 w-auto placeholder-gray-400"
+                                                                    className="text-white font-bold text-xs tracking-wide bg-transparent border-none focus:ring-0 focus:outline-none p-0 min-w-0 flex-1 placeholder-gray-400"
                                                                     placeholder="Author Name"
                                                                 />
-                                                                <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-blue-400"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" /></svg>
+                                                                <svg viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-blue-400 flex-shrink-0"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" /></svg>
                                                             </div>
                                                             <input
                                                                 type="text"
                                                                 value={article.date}
                                                                 onChange={(e) => setArticle(prev => ({ ...prev, date: e.target.value }))}
-                                                                className="bg-transparent border-none focus:ring-0 focus:outline-none p-0 text-[10px] w-20 placeholder-gray-500 text-gray-400 uppercase tracking-wider font-medium"
+                                                                className="bg-transparent border-none focus:ring-0 focus:outline-none p-0 text-[10px] placeholder-gray-500 text-gray-400 uppercase tracking-wider font-medium"
                                                                 placeholder="Date"
                                                             />
                                                         </div>
@@ -465,23 +465,6 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                 ) : (
                     // Desktop View - Full Width like visitor view
                     <div className="w-full bg-white font-serif">
-                        {/* Desktop Header (visual only, not fixed) */}
-                        <header className="absolute top-14 left-0 right-0 z-40 bg-transparent">
-                            <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 flex items-center justify-center font-serif font-bold text-xl rounded-sm bg-white text-gray-900">
-                                        T
-                                    </div>
-                                    <span className="font-serif font-bold text-lg tracking-tight text-white drop-shadow-md">
-                                        Top Health Insider
-                                    </span>
-                                </div>
-                                <div className="text-[10px] font-sans font-bold uppercase tracking-widest px-3 py-1 rounded-full border text-white border-white/30 bg-black/20 backdrop-blur-sm">
-                                    Trending Report
-                                </div>
-                            </div>
-                        </header>
-
                         {/* Desktop Hero - Full Width */}
                         <div className="relative group">
                             <div className="absolute top-20 right-6 z-50 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -539,22 +522,22 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                                         <div className="w-12 h-12 rounded-full ring-2 ring-white/30 p-0.5 bg-black/20 backdrop-blur-sm flex-shrink-0">
                                             <img src="https://picsum.photos/seed/doc/100" alt="Author" className="w-full h-full rounded-full object-cover" />
                                         </div>
-                                        <div className="flex flex-col">
+                                        <div className="flex flex-col min-w-0 flex-1">
                                             <div className="flex items-center gap-2">
                                                 <input
                                                     type="text"
                                                     value={article.author}
                                                     onChange={(e) => setArticle(prev => ({ ...prev, author: e.target.value }))}
-                                                    className="text-white font-bold text-sm tracking-wide bg-transparent border-none focus:ring-0 focus:outline-none p-0 w-auto placeholder-gray-400"
+                                                    className="text-white font-bold text-sm tracking-wide bg-transparent border-none focus:ring-0 focus:outline-none p-0 min-w-0 flex-1 placeholder-gray-400"
                                                     placeholder="Author Name"
                                                 />
-                                                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-blue-400"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" /></svg>
+                                                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-blue-400 flex-shrink-0"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" /></svg>
                                             </div>
                                             <input
                                                 type="text"
                                                 value={article.date}
                                                 onChange={(e) => setArticle(prev => ({ ...prev, date: e.target.value }))}
-                                                className="bg-transparent border-none focus:ring-0 focus:outline-none p-0 text-xs w-24 placeholder-gray-500 text-gray-400 uppercase tracking-wider font-medium"
+                                                className="bg-transparent border-none focus:ring-0 focus:outline-none p-0 text-xs placeholder-gray-500 text-gray-400 uppercase tracking-wider font-medium"
                                                 placeholder="Date"
                                             />
                                         </div>
