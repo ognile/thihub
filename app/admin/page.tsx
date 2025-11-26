@@ -29,6 +29,8 @@ import {
     MessageSquare,
     Save,
     BarChart3,
+    Search,
+    X,
 } from 'lucide-react';
 import CommentEditor from '@/components/admin/CommentEditor';
 import { CommentData } from '@/components/FBComments';
@@ -62,6 +64,17 @@ export default function AdminDashboard() {
     const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [articleToDelete, setArticleToDelete] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Filter articles based on search query
+    const filteredArticles = articles.filter(article => {
+        if (!searchQuery.trim()) return true;
+        const query = searchQuery.toLowerCase();
+        return (
+            article.title.toLowerCase().includes(query) ||
+            article.slug.toLowerCase().includes(query)
+        );
+    });
 
     useEffect(() => {
         fetchData();
@@ -290,14 +303,34 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Article List */}
                 <Card className="lg:col-span-1">
-                    <CardHeader>
+                    <CardHeader className="pb-3">
                         <CardTitle>Articles</CardTitle>
                         <CardDescription>Select an article to edit</CardDescription>
                     </CardHeader>
                     <CardContent className="p-0">
-                        <ScrollArea className="h-[500px]">
-                            <div className="p-4 space-y-2">
-                                {articles.map(article => (
+                        {/* Search Input */}
+                        <div className="px-4 pb-3">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    placeholder="Search articles..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="pl-9 pr-9"
+                                />
+                                {searchQuery && (
+                                    <button
+                                        onClick={() => setSearchQuery('')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        <ScrollArea className="h-[450px]">
+                            <div className="px-4 pb-4 space-y-2">
+                                {filteredArticles.map(article => (
                                     <div
                                         key={article.slug}
                                         onClick={() => setSelectedArticle(article)}
@@ -315,7 +348,19 @@ export default function AdminDashboard() {
                                         </div>
                                     </div>
                                 ))}
-                                {articles.length === 0 && (
+                                {filteredArticles.length === 0 && searchQuery && (
+                                    <div className="text-center py-8 text-muted-foreground">
+                                        <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                        <p className="text-sm">No articles match "{searchQuery}"</p>
+                                        <button 
+                                            onClick={() => setSearchQuery('')}
+                                            className="text-xs text-primary hover:underline mt-1"
+                                        >
+                                            Clear search
+                                        </button>
+                                    </div>
+                                )}
+                                {articles.length === 0 && !searchQuery && (
                                     <div className="text-center py-8 text-muted-foreground">
                                         <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
                                         <p className="text-sm">No articles yet</p>
