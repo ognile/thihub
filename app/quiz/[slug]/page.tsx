@@ -100,8 +100,9 @@ export default function QuizPlayer({ params }: { params: Promise<{ slug: string 
     const fetchQuiz = async () => {
         try {
             const res = await fetch(`/api/quizzes/by-slug/${slug}`);
+            const data = await res.json();
+            
             if (res.ok) {
-                const data = await res.json();
                 const slides = (data.slides || []).map((s: any) => ({
                     id: s.id,
                     type: s.type,
@@ -110,7 +111,12 @@ export default function QuizPlayer({ params }: { params: Promise<{ slug: string 
                 }));
                 setQuiz({ ...data, slides });
             } else if (res.status === 404) {
-                setError('Quiz not found');
+                // Show more specific error
+                if (data.status && data.status !== 'published') {
+                    setError(`Quiz is "${data.status}" - needs to be published`);
+                } else {
+                    setError('Quiz not found');
+                }
             } else {
                 setError('Failed to load quiz');
             }
