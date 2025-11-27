@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { useEditor, EditorContent, BubbleMenu, FloatingMenu, NodeViewWrapper, ReactNodeViewRenderer, mergeAttributes, Node } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
@@ -131,6 +131,7 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
     const [article, setArticle] = useState(initialArticle);
     const [saving, setSaving] = useState(false);
     const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
+    const iframeRef = useRef<HTMLIFrameElement>(null);
     const titleRef = useRef<HTMLTextAreaElement>(null);
     const subtitleRef = useRef<HTMLTextAreaElement>(null);
 
@@ -152,30 +153,63 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
             },
         },
         onUpdate: ({ editor }) => {
-            setArticle(prev => ({ ...prev, content: editor.getHTML() }));
+            const newContent = editor.getHTML();
+            setArticle(prev => ({ ...prev, content: newContent }));
         },
     });
 
-    // Auto-resize textareas on mount
-    useEffect(() => {
-        const resizeTextareas = () => {
-            requestAnimationFrame(() => {
-                if (titleRef.current) {
-                    titleRef.current.style.height = 'auto';
-                    titleRef.current.style.height = titleRef.current.scrollHeight + 'px';
-                }
-                if (subtitleRef.current) {
-                    subtitleRef.current.style.height = 'auto';
-                    subtitleRef.current.style.height = subtitleRef.current.scrollHeight + 'px';
-                }
-            });
+    // Auto-resize textareas on mount and content change
+    useLayoutEffect(() => {
+        const resize = () => {
+            if (titleRef.current) {
+                titleRef.current.style.height = 'auto';
+                titleRef.current.style.height = titleRef.current.scrollHeight + 'px';
+            }
+            if (subtitleRef.current) {
+                subtitleRef.current.style.height = 'auto';
+                subtitleRef.current.style.height = subtitleRef.current.scrollHeight + 'px';
+            }
         };
 
-        // Run immediately and after a short delay for fonts to load
-        resizeTextareas();
-        const timer = setTimeout(resizeTextareas, 100);
+        resize();
+        // Run again after fonts load
+        const timer = setTimeout(resize, 100);
+        document.fonts?.ready.then(resize);
+
         return () => clearTimeout(timer);
-    }, []);
+    }, [article.title, article.subtitle]);
+
+    // Send article updates to iframe
+    useEffect(() => {
+        if (previewMode === 'mobile' && iframeRef.current?.contentWindow) {
+            iframeRef.current.contentWindow.postMessage({
+                type: 'ARTICLE_UPDATE',
+                article,
+                isEditing: true
+            }, '*');
+        }
+    }, [article, previewMode]);
+
+    // Listen for messages from iframe
+    useEffect(() => {
+        const handleMessage = (event: MessageEvent) => {
+            if (event.data.type === 'PREVIEW_READY' && iframeRef.current?.contentWindow) {
+                // Send initial article data
+                iframeRef.current.contentWindow.postMessage({
+                    type: 'ARTICLE_UPDATE',
+                    article,
+                    isEditing: true
+                }, '*');
+            }
+            if (event.data.type === 'ARTICLE_FIELD_UPDATE') {
+                // Update from iframe edits
+                setArticle(prev => ({ ...prev, [event.data.field]: event.data.value }));
+            }
+        };
+
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+    }, [article]);
 
     const addImage = useCallback(async () => {
         const input = document.createElement('input');
@@ -256,16 +290,15 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
         field: 'title' | 'subtitle'
     ) => {
         setArticle({ ...article, [field]: e.target.value });
-        // Auto-resize
         e.target.style.height = 'auto';
         e.target.style.height = e.target.scrollHeight + 'px';
     };
 
     if (!editor) return null;
 
-    // Article preview content - shared between mobile and desktop
-    const ArticlePreview = (
-        <>
+    // Desktop preview content
+    const DesktopPreview = (
+        <div className="min-h-screen bg-white font-serif">
             {/* Cinematic Hero (Editable) */}
             <div className="relative group">
                 <div className="absolute top-4 right-4 z-50 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -476,7 +509,7 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                     />
                 </div>
             </main>
-        </>
+        </div>
     );
 
     return (
@@ -563,23 +596,25 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
             {/* Preview Area */}
             <div className="pt-14">
                 {previewMode === 'desktop' ? (
-                    // Desktop Preview - Full Width
-                    <div className="min-h-screen bg-white font-serif">
-                        {ArticlePreview}
-                    </div>
+                    // Desktop Preview - Full Width with inline editing
+                    DesktopPreview
                 ) : (
-                    // Mobile Preview - iPhone Frame
+                    // Mobile Preview - Iframe with true viewport
                     <div className="flex justify-center py-8 px-4">
                         <div className="relative">
                             {/* iPhone Frame */}
                             <div className="relative w-[375px] h-[812px] bg-black rounded-[3rem] p-3 shadow-2xl">
                                 {/* Dynamic Island / Notch */}
                                 <div className="absolute top-6 left-1/2 -translate-x-1/2 w-[100px] h-[30px] bg-black rounded-full z-50" />
-                                {/* Screen */}
+                                {/* Screen - Using iframe for true viewport */}
                                 <div className="w-full h-full bg-white rounded-[2.5rem] overflow-hidden">
-                                    <div className="w-full h-full overflow-y-auto font-serif" style={{ scrollbarWidth: 'none' }}>
-                                        {ArticlePreview}
-                                    </div>
+                                    <iframe
+                                        ref={iframeRef}
+                                        src={`/admin/articles/${article.slug}/preview`}
+                                        className="w-full h-full border-0"
+                                        title="Mobile Preview"
+                                        style={{ borderRadius: '2.5rem' }}
+                                    />
                                 </div>
                             </div>
                             {/* Side Buttons */}
