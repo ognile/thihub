@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 
 export interface CommentData {
     id: string;
@@ -107,7 +106,9 @@ export default function FBComments({ comments = [] }: FBCommentsProps) {
                     <h3 className="font-bold text-[#050505] text-lg font-sans">Comments</h3>
                 </div>
                 <p className="text-gray-500 text-sm italic">No comments yet.</p>
-                <CopyrightFooter />
+                <div className="mt-4 text-center text-[#65676B] text-[13px]">
+                    Facebook Comments Plugin
+                </div>
             </div>
         );
     }
@@ -136,20 +137,9 @@ export default function FBComments({ comments = [] }: FBCommentsProps) {
                 </button>
             </div>
 
-            <CopyrightFooter />
-        </div>
-    );
-}
-
-function CopyrightFooter() {
-    return (
-        <div className="mt-8 pt-6 border-t border-gray-100">
-            <p className="text-center text-[11px] text-[#65676B] leading-relaxed font-sans">
-                Copyright © {new Date().getFullYear()} Top Health Insider. All rights reserved. Top Health Insider does not provide medical advice, diagnosis, or treatment. See{' '}
-                <Link href="/disclaimer" className="text-[#1877F2] hover:underline">
-                    Additional Information
-                </Link>.
-            </p>
+            <div className="mt-4 text-center text-[#65676B] text-[13px]">
+                Facebook Comments Plugin
+            </div>
         </div>
     );
 }

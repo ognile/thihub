@@ -1,31 +1,15 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { toast } from 'sonner';
-import GenerationOverlay from '@/components/admin/GenerationOverlay';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { ArrowLeft, Sparkles, Plus, X } from 'lucide-react';
 
 export default function CreateArticlePage() {
     const router = useRouter();
     const [rawText, setRawText] = useState('');
     const [slug, setSlug] = useState('');
     const [loading, setLoading] = useState(false);
-    const [generationStage, setGenerationStage] = useState(0);
-    const stageTimersRef = useRef<NodeJS.Timeout[]>([]);
+    const [error, setError] = useState('');
 
     // Pixel State
     const [pixels, setPixels] = useState<string[]>([]);
@@ -40,6 +24,7 @@ export default function CreateArticlePage() {
     const [isAddingCta, setIsAddingCta] = useState(false);
 
     useEffect(() => {
+        // Fetch existing data to populate dropdowns
         const fetchData = async () => {
             try {
                 const [articlesRes, configRes] = await Promise.all([
@@ -71,7 +56,7 @@ export default function CreateArticlePage() {
 
     const handleGenerate = async () => {
         if (!rawText) {
-            toast.error('Please enter the article text');
+            setError('Please enter the article text.');
             return;
         }
 
@@ -79,29 +64,16 @@ export default function CreateArticlePage() {
         const finalCta = isAddingCta ? newCta : selectedCta;
 
         if (!finalPixel) {
-            toast.error('Please select or add a Pixel ID');
+            setError('Please select or add a Pixel ID.');
             return;
         }
         if (!finalCta) {
-            toast.error('Please select or add a CTA URL');
+            setError('Please select or add a CTA URL.');
             return;
         }
 
         setLoading(true);
-        setGenerationStage(0);
-
-        // Clear any existing timers
-        stageTimersRef.current.forEach(timer => clearTimeout(timer));
-        stageTimersRef.current = [];
-
-        // Progress through stages while API call is processing
-        const stageDurations = [3000, 4000, 4000];
-        stageDurations.forEach((duration, index) => {
-            const timer = setTimeout(() => {
-                setGenerationStage(index + 1);
-            }, stageDurations.slice(0, index + 1).reduce((a, b) => a + b, 0));
-            stageTimersRef.current.push(timer);
-        });
+        setError('');
 
         try {
             const res = await fetch('/api/generate-article', {
@@ -124,195 +96,191 @@ export default function CreateArticlePage() {
             // Wait a moment for blob storage to propagate
             await new Promise(resolve => setTimeout(resolve, 1500));
 
-            toast.success('Article generated successfully!');
+            // Redirect to editor
             router.push(`/admin/articles/${data.slug}`);
 
         } catch (err: any) {
-            stageTimersRef.current.forEach(timer => clearTimeout(timer));
-            stageTimersRef.current = [];
-            toast.error(err.message || 'Failed to generate article');
+            setError(err.message);
             setLoading(false);
-            setGenerationStage(0);
-        }
-    };
-
-    const handleAddPixel = () => {
-        if (newPixel.trim()) {
-            setPixels([...pixels, newPixel.trim()]);
-            setSelectedPixel(newPixel.trim());
-            setNewPixel('');
-            setIsAddingPixel(false);
-        }
-    };
-
-    const handleAddCta = () => {
-        if (newCta.trim()) {
-            setCtas([...ctas, newCta.trim()]);
-            setSelectedCta(newCta.trim());
-            setNewCta('');
-            setIsAddingCta(false);
         }
     };
 
     return (
-        <>
-            {loading && <GenerationOverlay stage={generationStage} />}
-
-            <div className="max-w-2xl mx-auto space-y-6">
-                {/* Header */}
-                <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" asChild>
-                        <Link href="/admin">
-                            <ArrowLeft className="h-4 w-4" />
+        <div className="min-h-screen bg-gray-50 font-sans">
+            <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+                <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <Link href="/admin" className="text-gray-500 hover:text-gray-900 transition-colors">
+                            ← Back to Dashboard
                         </Link>
-                    </Button>
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight">Create Article</h1>
-                        <p className="text-muted-foreground">Generate a new article with AI</p>
+                        <h1 className="text-xl font-bold text-gray-900">Create New Article</h1>
                     </div>
                 </div>
+            </header>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Article Content</CardTitle>
-                        <CardDescription>
-                            Paste your raw text and let AI format it into a polished article
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        {/* Slug Input */}
-                        <div className="space-y-2">
-                            <Label>Custom Slug (Optional)</Label>
-                            <div className="flex">
-                                <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-input bg-muted text-muted-foreground text-sm">
-                                    /articles/
-                                </span>
-                                <Input
-                                    value={slug}
-                                    onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
-                                    className="rounded-l-none"
-                                    placeholder="my-article-slug"
-                                />
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                Leave blank to auto-generate from title
-                            </p>
+            <main className="max-w-3xl mx-auto px-6 py-10">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+
+                    {/* Error Message */}
+                    {error && (
+                        <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-600 rounded-lg text-sm font-medium">
+                            {error}
                         </div>
+                    )}
 
-                        {/* Raw Text Input */}
-                        <div className="space-y-2">
-                            <Label>Advertorial Text</Label>
-                            <Textarea
-                                value={rawText}
-                                onChange={(e) => setRawText(e.target.value)}
-                                className="min-h-[250px] resize-y"
-                                placeholder="Paste your raw article text here. The AI will format it, generate a title, and create comments..."
+                    {/* Slug Input */}
+                    <div className="mb-6">
+                        <label className="block text-sm font-bold text-gray-900 mb-2">
+                            Custom Slug (Optional)
+                        </label>
+                        <div className="flex items-center">
+                            <span className="text-gray-500 bg-gray-100 border border-r-0 border-gray-300 rounded-l-lg px-3 py-2 text-sm">
+                                /articles/
+                            </span>
+                            <input
+                                type="text"
+                                value={slug}
+                                onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                                className="flex-1 bg-white border border-gray-300 rounded-r-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="e.g. adv-3"
                             />
                         </div>
-                    </CardContent>
-                </Card>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Leave blank to auto-generate from title.
+                        </p>
+                    </div>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Tracking & CTA</CardTitle>
-                        <CardDescription>
-                            Configure the Facebook Pixel and call-to-action for this article
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
+                    {/* Raw Text Input */}
+                    <div className="mb-8">
+                        <label className="block text-sm font-bold text-gray-900 mb-2">
+                            Advertorial Text
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                            Paste the raw text here. The AI will format it, generate a title, and create comments.
+                        </p>
+                        <textarea
+                            value={rawText}
+                            onChange={(e) => setRawText(e.target.value)}
+                            className="w-full h-64 p-4 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm leading-relaxed"
+                            placeholder="Paste your article text here..."
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
                         {/* Pixel Selection */}
-                        <div className="space-y-2">
-                            <Label>Facebook Pixel ID</Label>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-900 mb-2">
+                                Facebook Pixel ID
+                            </label>
                             {!isAddingPixel ? (
                                 <div className="flex gap-2">
-                                    <Select value={selectedPixel} onValueChange={setSelectedPixel}>
-                                        <SelectTrigger className="flex-1">
-                                            <SelectValue placeholder="Select a pixel" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {pixels.map(p => (
-                                                <SelectItem key={p} value={p}>{p}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <Button variant="outline" onClick={() => setIsAddingPixel(true)}>
-                                        <Plus className="h-4 w-4" />
-                                    </Button>
+                                    <select
+                                        value={selectedPixel}
+                                        onChange={(e) => setSelectedPixel(e.target.value)}
+                                        className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        {pixels.map(p => (
+                                            <option key={p} value={p}>{p}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        onClick={() => setIsAddingPixel(true)}
+                                        className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                                    >
+                                        + New
+                                    </button>
                                 </div>
                             ) : (
                                 <div className="flex gap-2">
-                                    <Input
+                                    <input
+                                        type="text"
                                         value={newPixel}
                                         onChange={(e) => setNewPixel(e.target.value)}
-                                        placeholder="Enter new Pixel ID"
-                                        className="flex-1"
+                                        placeholder="Enter Pixel ID"
+                                        className="flex-1 bg-white border border-blue-500 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                                         autoFocus
-                                        onKeyDown={(e) => e.key === 'Enter' && handleAddPixel()}
                                     />
-                                    <Button onClick={handleAddPixel}>Add</Button>
-                                    <Button variant="ghost" size="icon" onClick={() => setIsAddingPixel(false)}>
-                                        <X className="h-4 w-4" />
-                                    </Button>
+                                    <button
+                                        onClick={() => setIsAddingPixel(false)}
+                                        className="px-3 py-2 text-gray-500 hover:text-gray-700 text-sm"
+                                    >
+                                        Cancel
+                                    </button>
                                 </div>
                             )}
                         </div>
 
                         {/* CTA URL Selection */}
-                        <div className="space-y-2">
-                            <Label>CTA URL</Label>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-900 mb-2">
+                                CTA URL
+                            </label>
                             {!isAddingCta ? (
                                 <div className="flex gap-2">
-                                    <Select value={selectedCta} onValueChange={setSelectedCta}>
-                                        <SelectTrigger className="flex-1">
-                                            <SelectValue placeholder="Select a CTA URL" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {ctas.map(c => (
-                                                <SelectItem key={c} value={c}>
-                                                    <span className="truncate max-w-[300px] block">{c}</span>
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <Button variant="outline" onClick={() => setIsAddingCta(true)}>
-                                        <Plus className="h-4 w-4" />
-                                    </Button>
+                                    <select
+                                        value={selectedCta}
+                                        onChange={(e) => setSelectedCta(e.target.value)}
+                                        className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        {ctas.map(c => (
+                                            <option key={c} value={c}>{c}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        onClick={() => setIsAddingCta(true)}
+                                        className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                                    >
+                                        + New
+                                    </button>
                                 </div>
                             ) : (
                                 <div className="flex gap-2">
-                                    <Input
+                                    <input
+                                        type="text"
                                         value={newCta}
                                         onChange={(e) => setNewCta(e.target.value)}
                                         placeholder="https://..."
-                                        className="flex-1"
+                                        className="flex-1 bg-white border border-blue-500 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                                         autoFocus
-                                        onKeyDown={(e) => e.key === 'Enter' && handleAddCta()}
                                     />
-                                    <Button onClick={handleAddCta}>Add</Button>
-                                    <Button variant="ghost" size="icon" onClick={() => setIsAddingCta(false)}>
-                                        <X className="h-4 w-4" />
-                                    </Button>
+                                    <button
+                                        onClick={() => setIsAddingCta(false)}
+                                        className="px-3 py-2 text-gray-500 hover:text-gray-700 text-sm"
+                                    >
+                                        Cancel
+                                    </button>
                                 </div>
                             )}
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
 
-                {/* Generate Button */}
-                <Button
-                    onClick={handleGenerate}
-                    disabled={loading}
-                    size="lg"
-                    className="w-full"
-                >
-                    <Sparkles className="mr-2 h-5 w-5" />
-                    Generate Article with AI
-                </Button>
+                    {/* Generate Button */}
+                    <button
+                        onClick={handleGenerate}
+                        disabled={loading}
+                        className={`w-full py-4 rounded-xl text-white font-bold text-lg shadow-lg transition-all transform hover:-translate-y-0.5 ${loading
+                            ? 'bg-gray-400 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-blue-200'
+                            }`}
+                    >
+                        {loading ? (
+                            <span className="flex items-center justify-center gap-2">
+                                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Generating Article...
+                            </span>
+                        ) : (
+                            'Generate Article with AI ✨'
+                        )}
+                    </button>
 
-                <p className="text-center text-xs text-muted-foreground">
-                    Powered by Google Gemini. Generates title, content, and comments automatically.
-                </p>
-            </div>
-        </>
+                    <p className="text-center text-xs text-gray-400 mt-4">
+                        Powered by Google Gemini Flash. Generates title, content, and comments automatically.
+                    </p>
+                </div>
+            </main>
+        </div>
     );
 }

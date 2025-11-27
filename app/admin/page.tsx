@@ -1,37 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { toast } from 'sonner';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
-import {
-    FileText,
-    Plus,
-    Settings,
-    ExternalLink,
-    Pencil,
-    Trash2,
-    MessageSquare,
-    Save,
-    BarChart3,
-    Search,
-    X,
-} from 'lucide-react';
 import CommentEditor from '@/components/admin/CommentEditor';
 import { CommentData } from '@/components/FBComments';
 
@@ -57,39 +28,35 @@ interface Config {
 }
 
 export default function AdminDashboard() {
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [config, setConfig] = useState<Config | null>(null);
     const [articles, setArticles] = useState<Article[]>([]);
-    const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-    const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
-    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-    const [articleToDelete, setArticleToDelete] = useState<string | null>(null);
-    const [searchQuery, setSearchQuery] = useState('');
-
-    // Filter articles based on search query
-    const filteredArticles = articles.filter(article => {
-        if (!searchQuery.trim()) return true;
-        const query = searchQuery.toLowerCase();
-        return (
-            article.title.toLowerCase().includes(query) ||
-            article.slug.toLowerCase().includes(query)
-        );
-    });
+    const [selectedArticle, setSelectedArticle] = useState<string | null>(null);
+    const [saveStatus, setSaveStatus] = useState('');
+    const router = useRouter();
 
     useEffect(() => {
-        fetchData();
+        checkAuth();
+        fetchConfig();
+        fetchArticles();
     }, []);
 
-    const fetchData = async () => {
-        setIsLoading(true);
+    const checkAuth = async () => {
         try {
-            const [configRes, articlesRes] = await Promise.all([
-                fetch('/api/config'),
-                fetch('/api/articles')
-            ]);
+            setIsAuthenticated(true);
+        } catch (e) {
+            router.push('/admin/login');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-            if (configRes.ok) {
-                const data = await configRes.json();
+    const fetchConfig = async () => {
+        try {
+            const res = await fetch('/api/config');
+            if (res.ok) {
+                const data = await res.json();
                 if (data.default && !data.defaultPixelId) {
                     const migratedConfig: Config = {
                         defaultPixelId: data.default,
@@ -108,21 +75,31 @@ export default function AdminDashboard() {
                     setConfig(data);
                 }
             }
+        } catch (e) {
+            console.error('Failed to fetch config', e);
+        }
+    };
 
-            if (articlesRes.ok) {
-                const data = await articlesRes.json();
+    const fetchArticles = async () => {
+        try {
+            const res = await fetch('/api/articles');
+            if (res.ok) {
+                const data = await res.json();
                 setArticles(data);
             }
         } catch (e) {
-            console.error('Failed to fetch data', e);
-            toast.error('Failed to load data');
-        } finally {
-            setIsLoading(false);
+            console.error('Failed to fetch articles', e);
         }
+    };
+
+    const handleLogout = async () => {
+        await fetch('/api/auth/login', { method: 'DELETE' });
+        router.push('/admin/login');
     };
 
     const handleSaveConfig = async () => {
         if (!config) return;
+        setSaveStatus('Saving config...');
         try {
             const res = await fetch('/api/config', {
                 method: 'POST',
@@ -130,63 +107,60 @@ export default function AdminDashboard() {
                 body: JSON.stringify(config),
             });
             if (res.ok) {
-                toast.success('Configuration saved successfully');
-                setIsConfigDialogOpen(false);
+                setSaveStatus('Config saved!');
+                setTimeout(() => setSaveStatus(''), 2000);
             } else {
-                toast.error('Failed to save configuration');
+                setSaveStatus('Error saving config');
             }
-        } catch {
-            toast.error('Failed to save configuration');
+        } catch (e) {
+            setSaveStatus('Error saving config');
         }
     };
 
-    const handleSaveArticle = async (article: Article) => {
+    const handleSaveComments = async (slug: string, comments: CommentData[], ctaText?: string, ctaTitle?: string, ctaDescription?: string) => {
+        setSaveStatus('Saving article...');
         try {
             const res = await fetch('/api/articles', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    slug: article.slug,
-                    comments: article.comments,
-                    ctaText: article.ctaText,
-                    ctaTitle: article.ctaTitle,
-                    ctaDescription: article.ctaDescription
-                }),
+                body: JSON.stringify({ slug, comments, ctaText, ctaTitle, ctaDescription }),
             });
 
             if (res.ok) {
-                toast.success('Article saved successfully');
-                setArticles(articles.map(a => a.slug === article.slug ? article : a));
+                setSaveStatus('Article saved!');
+                setArticles(articles.map(a => a.slug === slug ? { ...a, comments, ctaText, ctaTitle, ctaDescription } : a));
+                setTimeout(() => setSaveStatus(''), 2000);
             } else {
-                toast.error('Failed to save article');
+                setSaveStatus('Error saving article');
             }
-        } catch {
-            toast.error('Failed to save article');
+        } catch (e) {
+            setSaveStatus('Error saving article');
         }
     };
 
-    const handleDeleteArticle = async () => {
-        if (!articleToDelete) return;
+    const handleDeleteArticle = async (slug: string) => {
+        if (!window.confirm(`Are you sure you want to delete the article "${slug}"? This action cannot be undone.`)) {
+            return;
+        }
 
+        setSaveStatus('Deleting article...');
         try {
-            const res = await fetch(`/api/articles?slug=${articleToDelete}`, {
+            const res = await fetch(`/api/articles?slug=${slug}`, {
                 method: 'DELETE',
             });
 
             if (res.ok) {
-                toast.success('Article deleted successfully');
-                setArticles(articles.filter(a => a.slug !== articleToDelete));
-                if (selectedArticle?.slug === articleToDelete) {
+                setSaveStatus('Article deleted!');
+                setArticles(articles.filter(a => a.slug !== slug));
+                if (selectedArticle === slug) {
                     setSelectedArticle(null);
                 }
+                setTimeout(() => setSaveStatus(''), 2000);
             } else {
-                toast.error('Failed to delete article');
+                setSaveStatus('Error deleting article');
             }
-        } catch {
-            toast.error('Failed to delete article');
-        } finally {
-            setIsDeleteDialogOpen(false);
-            setArticleToDelete(null);
+        } catch (e) {
+            setSaveStatus('Error deleting article');
         }
     };
 
@@ -194,13 +168,6 @@ export default function AdminDashboard() {
         if (config) {
             setConfig({ ...config, [key]: value });
         }
-    };
-
-    const getArticleConfigValue = (slug: string, key: 'pixelId' | 'ctaUrl') => {
-        const articleConfig = config?.articles?.[slug];
-        if (!articleConfig) return '';
-        if (typeof articleConfig === 'string') return key === 'pixelId' ? articleConfig : '';
-        return articleConfig[key] || '';
     };
 
     const updateArticleConfig = (slug: string, key: 'pixelId' | 'ctaUrl', value: string) => {
@@ -225,352 +192,257 @@ export default function AdminDashboard() {
         });
     };
 
-    if (isLoading) {
-        return (
-            <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                    <Skeleton className="h-8 w-48" />
-                    <Skeleton className="h-10 w-32" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {[1, 2, 3].map(i => (
-                        <Skeleton key={i} className="h-24" />
-                    ))}
-                </div>
-                <Skeleton className="h-96" />
-            </div>
-        );
-    }
+    const getArticleConfigValue = (slug: string, key: 'pixelId' | 'ctaUrl') => {
+        const articleConfig = config?.articles?.[slug];
+        if (!articleConfig) return '';
+        if (typeof articleConfig === 'string') return key === 'pixelId' ? articleConfig : '';
+        return articleConfig[key] || '';
+    };
+
+    if (isLoading) return <div className="p-10 text-center">Loading...</div>;
+    if (!isAuthenticated) return null;
+
+    const selectedArticleData = articles.find(a => a.slug === selectedArticle);
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="min-w-0">
-                    <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-                    <p className="text-muted-foreground">Manage your articles and settings</p>
-                </div>
-                <div className="flex gap-2 flex-shrink-0">
-                    <Button variant="outline" onClick={() => setIsConfigDialogOpen(true)}>
-                        <Settings className="mr-2 h-4 w-4" />
-                        Settings
-                    </Button>
-                    <Button asChild>
-                        <Link href="/admin/create">
-                            <Plus className="mr-2 h-4 w-4" />
-                            New Article
-                        </Link>
-                    </Button>
-                </div>
-            </div>
+        <div className="min-h-screen bg-gray-50 font-sans">
+            <nav className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+                <h1 className="text-xl font-bold text-gray-800">Admin Dashboard</h1>
+                <button onClick={handleLogout} className="text-sm text-red-600 hover:text-red-800 font-medium">Logout</button>
+            </nav>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Total Articles</CardTitle>
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{articles.length}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Total Comments</CardTitle>
-                        <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {articles.reduce((acc, a) => acc + (a.comments?.length || 0), 0)}
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Active Pixels</CardTitle>
-                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {new Set([config?.defaultPixelId, ...Object.values(config?.articles || {}).map(a => typeof a === 'string' ? a : a.pixelId)].filter(Boolean)).size}
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Articles Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Article List */}
-                <Card className="lg:col-span-1">
-                    <CardHeader className="pb-3">
-                        <CardTitle>Articles</CardTitle>
-                        <CardDescription>Select an article to edit</CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        {/* Search Input */}
-                        <div className="px-4 pb-3">
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                    placeholder="Search articles..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="pl-9 pr-9"
-                                />
-                                {searchQuery && (
-                                    <button
-                                        onClick={() => setSearchQuery('')}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                    >
-                                        <X className="h-4 w-4" />
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                        <ScrollArea className="h-[450px]">
-                            <div className="px-4 pb-4 space-y-1">
-                                {filteredArticles.map(article => (
-                                    <div
-                                        key={article.slug}
-                                        onClick={() => setSelectedArticle(article)}
-                                        className={`p-3 rounded-lg cursor-pointer transition-all border ${selectedArticle?.slug === article.slug
-                                            ? 'bg-accent border-primary/20'
-                                            : 'hover:bg-accent/50 border-transparent'
-                                            }`}
-                                    >
-                                        <p className="font-medium text-sm line-clamp-2 leading-snug">{article.title}</p>
-                                        <div className="flex items-center justify-between gap-2 mt-2">
-                                            <span className="text-xs text-muted-foreground truncate">/{article.slug}</span>
-                                            <Badge variant="secondary" className="text-[10px] shrink-0">
-                                                {article.comments?.length || 0}
-                                            </Badge>
-                                        </div>
-                                    </div>
-                                ))}
-                                {filteredArticles.length === 0 && searchQuery && (
-                                    <div className="text-center py-8 text-muted-foreground">
-                                        <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                                        <p className="text-sm">No articles match "{searchQuery}"</p>
-                                        <button 
-                                            onClick={() => setSearchQuery('')}
-                                            className="text-xs text-primary hover:underline mt-1"
-                                        >
-                                            Clear search
-                                        </button>
-                                    </div>
-                                )}
-                                {articles.length === 0 && !searchQuery && (
-                                    <div className="text-center py-8 text-muted-foreground">
-                                        <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                                        <p className="text-sm">No articles yet</p>
-                                    </div>
-                                )}
-                            </div>
-                        </ScrollArea>
-                    </CardContent>
-                </Card>
-
-                {/* Article Editor */}
-                <Card className="lg:col-span-2">
-                    {selectedArticle ? (
-                        <>
-                            <CardHeader className="pb-4">
-                                <div className="flex gap-2 mb-3">
-                                    <Button variant="outline" size="sm" asChild>
-                                        <Link href={`/articles/${selectedArticle.slug}`} target="_blank">
-                                            <ExternalLink className="mr-2 h-4 w-4" />
-                                            View
-                                        </Link>
-                                    </Button>
-                                    <Button size="sm" asChild>
-                                        <Link href={`/admin/articles/${selectedArticle.slug}`}>
-                                            <Pencil className="mr-2 h-4 w-4" />
-                                            Edit
-                                        </Link>
-                                    </Button>
-                                </div>
-                                <CardTitle className="text-base leading-tight">{selectedArticle.title}</CardTitle>
-                                <CardDescription>/{selectedArticle.slug}</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
-                                {/* Tracking Config */}
-                                <div className="space-y-4">
-                                    <h3 className="text-sm font-semibold flex items-center gap-2">
-                                        <BarChart3 className="h-4 w-4" />
-                                        Tracking Configuration
-                                    </h3>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label className="text-xs">Pixel ID Override</Label>
-                                            <Input
-                                                placeholder={config?.defaultPixelId || 'Use default'}
-                                                value={getArticleConfigValue(selectedArticle.slug, 'pixelId')}
-                                                onChange={(e) => updateArticleConfig(selectedArticle.slug, 'pixelId', e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label className="text-xs">CTA URL Override</Label>
-                                            <Input
-                                                placeholder={config?.defaultCtaUrl || 'Use default'}
-                                                value={getArticleConfigValue(selectedArticle.slug, 'ctaUrl')}
-                                                onChange={(e) => updateArticleConfig(selectedArticle.slug, 'ctaUrl', e.target.value)}
-                                            />
-                                        </div>
-                                    </div>
-                                    <Button size="sm" variant="outline" onClick={handleSaveConfig}>
-                                        <Save className="mr-2 h-4 w-4" />
-                                        Save Tracking Config
-                                    </Button>
-                                </div>
-
-                                <Separator />
-
-                                {/* CTA Customization */}
-                                <div className="space-y-4">
-                                    <h3 className="text-sm font-semibold">CTA Customization</h3>
-                                    <div className="grid grid-cols-1 gap-3">
-                                        <div className="space-y-2">
-                                            <Label className="text-xs">CTA Title</Label>
-                                            <Input
-                                                placeholder="Curious about the science?"
-                                                value={selectedArticle.ctaTitle || ''}
-                                                onChange={(e) => setSelectedArticle({ ...selectedArticle, ctaTitle: e.target.value })}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label className="text-xs">CTA Button Text</Label>
-                                            <Input
-                                                placeholder="Check Availability »"
-                                                value={selectedArticle.ctaText || ''}
-                                                onChange={(e) => setSelectedArticle({ ...selectedArticle, ctaText: e.target.value })}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label className="text-xs">CTA Subtext</Label>
-                                            <Input
-                                                placeholder="Secure, verified link..."
-                                                value={selectedArticle.ctaDescription || ''}
-                                                onChange={(e) => setSelectedArticle({ ...selectedArticle, ctaDescription: e.target.value })}
-                                            />
-                                        </div>
-                                    </div>
-                                    <Button size="sm" onClick={() => handleSaveArticle(selectedArticle)}>
-                                        <Save className="mr-2 h-4 w-4" />
-                                        Save CTA Settings
-                                    </Button>
-                                </div>
-
-                                <Separator />
-
-                                {/* Danger Zone */}
-                                <div className="space-y-3">
-                                    <h3 className="text-sm font-semibold text-destructive">Danger Zone</h3>
-                                    <p className="text-xs text-muted-foreground">Once deleted, this article cannot be recovered.</p>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                        onClick={() => {
-                                            setArticleToDelete(selectedArticle.slug);
-                                            setIsDeleteDialogOpen(true);
-                                        }}
-                                    >
-                                        <Trash2 className="mr-2 h-4 w-4" />
-                                        Delete Article
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center h-[500px] text-muted-foreground">
-                            <FileText className="h-12 w-12 mb-4 opacity-20" />
-                            <p className="text-sm">Select an article to edit</p>
-                        </div>
-                    )}
-                </Card>
-            </div>
-
-            {/* Comments Section - Below */}
-            {selectedArticle && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <MessageSquare className="h-5 w-5" />
-                            Comments Manager
-                        </CardTitle>
-                        <CardDescription>Manage Facebook-style comments for this article</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <CommentEditor
-                            comments={selectedArticle.comments || []}
-                            onChange={(newComments) => {
-                                const updated = { ...selectedArticle, comments: newComments };
-                                setSelectedArticle(updated);
-                                handleSaveArticle(updated);
-                            }}
-                        />
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Global Settings Dialog */}
-            <Dialog open={isConfigDialogOpen} onOpenChange={setIsConfigDialogOpen}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>Global Settings</DialogTitle>
-                        <DialogDescription>
-                            Configure default tracking and CTA settings for all articles.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label>Default Pixel ID</Label>
-                            <Input
+            <main className="max-w-6xl mx-auto p-6">
+                {/* Global Settings */}
+                <div className="bg-white rounded-xl shadow-sm p-6 mb-8 border border-gray-100">
+                    <h2 className="text-lg font-bold text-gray-800 mb-4">Global Defaults</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-600 mb-1">Default Pixel ID</label>
+                            <input
+                                type="text"
                                 value={config?.defaultPixelId || ''}
                                 onChange={(e) => updateGlobalConfig('defaultPixelId', e.target.value)}
-                                placeholder="123456789"
+                                className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
                             />
                         </div>
-                        <div className="space-y-2">
-                            <Label>Default CTA URL</Label>
-                            <Input
+                        <div>
+                            <label className="block text-sm font-medium text-gray-600 mb-1">Default CTA URL</label>
+                            <input
+                                type="text"
                                 value={config?.defaultCtaUrl || ''}
                                 onChange={(e) => updateGlobalConfig('defaultCtaUrl', e.target.value)}
-                                placeholder="https://..."
+                                className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
                             />
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsConfigDialogOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleSaveConfig}>
-                            Save Changes
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                    <div className="mt-4 flex justify-end">
+                        <button
+                            onClick={handleSaveConfig}
+                            className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                        >
+                            Save Global Config
+                        </button>
+                    </div>
+                </div>
 
-            {/* Delete Confirmation Dialog */}
-            <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>Delete Article</DialogTitle>
-                        <DialogDescription>
-                            Are you sure you want to delete this article? This action cannot be undone.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button variant="destructive" onClick={handleDeleteArticle}>
-                            Delete
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                {/* Article Management */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                        <h2 className="text-lg font-bold text-gray-800">Article Management</h2>
+                        <div className="flex items-center gap-4">
+                            {saveStatus && <span className="text-green-600 font-medium text-sm animate-pulse">{saveStatus}</span>}
+                            <Link
+                                href="/admin/create"
+                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center gap-2"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                Create New Article
+                            </Link>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 min-h-[600px]">
+                        {/* Article List Sidebar */}
+                        <div className="border-r border-gray-100 bg-gray-50/50 p-4">
+                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Articles</h3>
+                            <div className="space-y-2">
+                                {articles.map(article => (
+                                    <div
+                                        key={article.slug}
+                                        onClick={() => setSelectedArticle(article.slug)}
+                                        className={`p-3 rounded-lg cursor-pointer transition-all ${selectedArticle === article.slug
+                                            ? 'bg-white shadow-md border border-blue-100 ring-1 ring-blue-500'
+                                            : 'hover:bg-white hover:shadow-sm border border-transparent'
+                                            }`}
+                                    >
+                                        <div className="font-medium text-gray-900 text-sm truncate">{article.title}</div>
+                                        <div className="text-xs text-gray-500 mt-1 flex justify-between">
+                                            <span>/{article.slug}</span>
+                                            <span className="bg-gray-200 px-1.5 rounded text-[10px]">{article.comments?.length || 0} comments</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Editor Area */}
+                        <div className="col-span-2 p-6 bg-white">
+                            {selectedArticle && selectedArticleData ? (
+                                <div className="space-y-8">
+                                    {/* Config Section */}
+                                    <div className="bg-gray-50 p-5 rounded-xl border border-gray-100">
+                                        <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                            Tracking & CTA Configuration
+                                        </h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-500 mb-1">Pixel ID Override</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder={`Default: ${config?.defaultPixelId}`}
+                                                    value={getArticleConfigValue(selectedArticle, 'pixelId')}
+                                                    onChange={(e) => updateArticleConfig(selectedArticle, 'pixelId', e.target.value)}
+                                                    className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-500 mb-1">CTA URL Override</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder={`Default: ${config?.defaultCtaUrl}`}
+                                                    value={getArticleConfigValue(selectedArticle, 'ctaUrl')}
+                                                    onChange={(e) => updateArticleConfig(selectedArticle, 'ctaUrl', e.target.value)}
+                                                    className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="mt-3 flex justify-end">
+                                            <button onClick={handleSaveConfig} className="text-xs text-blue-600 hover:underline font-medium">Save Configuration</button>
+                                        </div>
+                                    </div>
+
+                                    {/* Content Customization */}
+                                    <div className="bg-gray-50 p-5 rounded-xl border border-gray-100">
+                                        <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                            Content Customization
+                                        </h3>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1">CTA Title</label>
+                                            <input
+                                                type="text"
+                                                placeholder="e.g. Curious about the science?"
+                                                value={selectedArticleData.ctaTitle || ''}
+                                                onChange={(e) => {
+                                                    const newArticles = articles.map(a =>
+                                                        a.slug === selectedArticle ? { ...a, ctaTitle: e.target.value } : a
+                                                    );
+                                                    setArticles(newArticles);
+                                                }}
+                                                className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-3"
+                                            />
+
+                                            <label className="block text-xs font-medium text-gray-500 mb-1">CTA Button Text</label>
+                                            <input
+                                                type="text"
+                                                placeholder="e.g. Watch The Video »"
+                                                value={selectedArticleData.ctaText || ''}
+                                                onChange={(e) => {
+                                                    const newArticles = articles.map(a =>
+                                                        a.slug === selectedArticle ? { ...a, ctaText: e.target.value } : a
+                                                    );
+                                                    setArticles(newArticles);
+                                                }}
+                                                className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-3"
+                                            />
+
+                                            <label className="block text-xs font-medium text-gray-500 mb-1">CTA Subtext</label>
+                                            <input
+                                                type="text"
+                                                placeholder="e.g. Secure, verified link to official research."
+                                                value={selectedArticleData.ctaDescription || ''}
+                                                onChange={(e) => {
+                                                    const newArticles = articles.map(a =>
+                                                        a.slug === selectedArticle ? { ...a, ctaDescription: e.target.value } : a
+                                                    );
+                                                    setArticles(newArticles);
+                                                }}
+                                                className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-3"
+                                            />
+                                            <div className="flex items-center gap-3 mb-4">
+                                                <a
+                                                    href={`/articles/${selectedArticle}`}
+                                                    target="_blank"
+                                                    className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                                                >
+                                                    View Live <span className="text-xs">↗</span>
+                                                </a>
+                                                <Link
+                                                    href={`/admin/articles/${selectedArticle}`}
+                                                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-sm"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                                    Open Visual Editor
+                                                </Link>
+                                            </div>
+                                            <div className="flex justify-end">
+                                                <button
+                                                    onClick={() => handleSaveComments(
+                                                        selectedArticle,
+                                                        selectedArticleData.comments || [],
+                                                        selectedArticleData.ctaText,
+                                                        selectedArticleData.ctaTitle,
+                                                        selectedArticleData.ctaDescription
+                                                    )}
+                                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                                                >
+                                                    Save Content
+                                                </button>
+                                            </div>
+
+                                            <div className="mt-8 pt-6 border-t border-gray-200">
+                                                <h4 className="text-xs font-bold text-red-600 uppercase tracking-wider mb-2">Danger Zone</h4>
+                                                <p className="text-xs text-gray-500 mb-3">Once you delete an article, there is no going back. Please be certain.</p>
+                                                <button
+                                                    onClick={() => handleDeleteArticle(selectedArticle)}
+                                                    className="bg-white border border-red-200 text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                    Delete Article
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Comments Editor */}
+                                    <div>
+                                        <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                                            Comments Manager
+                                        </h3>
+                                        <CommentEditor
+                                            comments={selectedArticleData.comments || []}
+                                            onChange={(newComments) => handleSaveComments(
+                                                selectedArticle,
+                                                newComments,
+                                                selectedArticleData.ctaText,
+                                                selectedArticleData.ctaTitle,
+                                                selectedArticleData.ctaDescription
+                                            )}
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                                    <svg className="w-16 h-16 mb-4 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" /></svg>
+                                    <p>Select an article to edit settings and comments</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </main>
         </div>
     );
 }

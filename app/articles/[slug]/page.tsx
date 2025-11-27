@@ -9,23 +9,20 @@ import CinematicHero from '@/components/CinematicHero';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-// Get single article from API (optimized - fetches only the requested article)
+// Get article from API (which handles both local files and Blob storage)
 async function getArticle(slug: string) {
     try {
-        const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || '';
-        const response = await fetch(`${baseUrl}/api/articles/${slug}`, {
+        // Use relative URL - works in both local and production
+        const response = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/articles`, {
             cache: 'no-store'
         });
 
-        if (response.status === 404) {
-            return null;
-        }
-
         if (!response.ok) {
-            throw new Error('Failed to fetch article');
+            throw new Error('Failed to fetch articles');
         }
 
-        return await response.json();
+        const articles = await response.json();
+        return articles.find((a: any) => a.slug === slug) || null;
     } catch (e) {
         console.error('Error fetching article:', e);
     }

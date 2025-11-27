@@ -36,9 +36,6 @@ import {
     ListChecks,
     Users,
     Layers,
-    Database,
-    Check,
-    RefreshCw,
 } from 'lucide-react';
 
 interface Quiz {
@@ -53,68 +50,16 @@ interface Quiz {
     updated_at: string;
 }
 
-const SETUP_SQL = `-- Quiz Funnel Builder Tables
--- Run this in your Supabase Dashboard > SQL Editor
-
-CREATE TABLE IF NOT EXISTS quizzes (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    slug TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    description TEXT,
-    settings JSONB DEFAULT '{"primaryColor": "#0F4C81", "backgroundColor": "#ffffff", "showProgressBar": true, "allowBack": false}'::jsonb,
-    status TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS quiz_slides (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    quiz_id UUID NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
-    slide_order INTEGER NOT NULL,
-    type TEXT NOT NULL CHECK (type IN ('text-choice', 'image-choice', 'multi-select', 'info', 'loading', 'results', 'offer')),
-    content JSONB NOT NULL DEFAULT '{}'::jsonb,
-    conditional_logic JSONB DEFAULT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(quiz_id, slide_order)
-);
-
-CREATE TABLE IF NOT EXISTS quiz_responses (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    quiz_id UUID NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
-    session_id TEXT NOT NULL,
-    answers JSONB NOT NULL DEFAULT '[]'::jsonb,
-    current_slide INTEGER DEFAULT 0,
-    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    completed_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
-    user_agent TEXT,
-    ip_address TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_quiz_slides_quiz_id ON quiz_slides(quiz_id);
-CREATE INDEX IF NOT EXISTS idx_quiz_responses_quiz_id ON quiz_responses(quiz_id);
-CREATE INDEX IF NOT EXISTS idx_quizzes_slug ON quizzes(slug);
-
-ALTER TABLE quizzes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE quiz_slides ENABLE ROW LEVEL SECURITY;
-ALTER TABLE quiz_responses ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Allow all on quizzes" ON quizzes FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all on quiz_slides" ON quiz_slides FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all on quiz_responses" ON quiz_responses FOR ALL USING (true) WITH CHECK (true);`;
-
 export default function QuizDashboard() {
     const router = useRouter();
     const [quizzes, setQuizzes] = useState<Quiz[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [needsSetup, setNeedsSetup] = useState(false);
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [quizToDelete, setQuizToDelete] = useState<Quiz | null>(null);
     const [newQuizName, setNewQuizName] = useState('');
     const [newQuizSlug, setNewQuizSlug] = useState('');
     const [isCreating, setIsCreating] = useState(false);
-    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         fetchQuizzes();
@@ -125,16 +70,7 @@ export default function QuizDashboard() {
             const res = await fetch('/api/quizzes');
             if (res.ok) {
                 const data = await res.json();
-                if (data.error && data.needsSetup) {
-                    setNeedsSetup(true);
-                } else {
-                    setQuizzes(data);
-                }
-            } else {
-                const data = await res.json();
-                if (data.needsSetup) {
-                    setNeedsSetup(true);
-                }
+                setQuizzes(data);
             }
         } catch (e) {
             console.error('Failed to fetch quizzes:', e);
@@ -142,13 +78,6 @@ export default function QuizDashboard() {
         } finally {
             setIsLoading(false);
         }
-    };
-
-    const copySetupSQL = () => {
-        navigator.clipboard.writeText(SETUP_SQL);
-        setCopied(true);
-        toast.success('SQL copied to clipboard!');
-        setTimeout(() => setCopied(false), 2000);
     };
 
     const handleCreateQuiz = async () => {
@@ -276,70 +205,6 @@ export default function QuizDashboard() {
                         <Skeleton key={i} className="h-48 rounded-xl" />
                     ))}
                 </div>
-            </div>
-        );
-    }
-
-    if (needsSetup) {
-        return (
-            <div className="space-y-6">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Quiz Funnels Setup</h1>
-                    <p className="text-muted-foreground">One-time database setup required</p>
-                </div>
-
-                <Card className="border-amber-200 bg-amber-50/50">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Database className="h-5 w-5" />
-                            Database Tables Required
-                        </CardTitle>
-                        <CardDescription>
-                            The quiz tables haven't been created yet. Follow these simple steps:
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <p className="font-medium">Step 1: Open Supabase Dashboard</p>
-                            <p className="text-sm text-muted-foreground">
-                                Go to your Supabase project → SQL Editor
-                            </p>
-                        </div>
-                        <div className="space-y-2">
-                            <p className="font-medium">Step 2: Copy & Run this SQL</p>
-                            <div className="relative">
-                                <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs overflow-x-auto max-h-64">
-                                    {SETUP_SQL}
-                                </pre>
-                                <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    className="absolute top-2 right-2"
-                                    onClick={copySetupSQL}
-                                >
-                                    {copied ? (
-                                        <>
-                                            <Check className="h-4 w-4 mr-1" />
-                                            Copied!
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Copy className="h-4 w-4 mr-1" />
-                                            Copy SQL
-                                        </>
-                                    )}
-                                </Button>
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <p className="font-medium">Step 3: Refresh this page</p>
-                            <Button onClick={() => window.location.reload()}>
-                                <RefreshCw className="h-4 w-4 mr-2" />
-                                I've run the SQL - Refresh
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
             </div>
         );
     }
