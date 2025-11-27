@@ -1,15 +1,26 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useEditor, EditorContent, BubbleMenu, FloatingMenu, NodeViewWrapper, ReactNodeViewRenderer, mergeAttributes, Node } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import BubbleMenuExtension from '@tiptap/extension-bubble-menu';
 import FloatingMenuExtension from '@tiptap/extension-floating-menu';
-import ArticleHeader from '@/components/ArticleHeader';
-import TrustBadge from '@/components/TrustBadge';
 import TestimonialExtension from '@/components/admin/extensions/TestimonialExtension';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+
+// shadcn/ui components
+import { Button } from '@/components/ui/button';
+import {
+    ArrowLeft,
+    Save,
+    Loader2,
+    Smartphone,
+    Monitor,
+    ExternalLink,
+} from 'lucide-react';
 
 // --- Custom Important Update Node ---
 const ImportantUpdateExtension = Node.create({
@@ -62,7 +73,7 @@ const ImageNode = ({ node, updateAttributes, deleteNode }: any) => {
                     }
                 } catch (err) {
                     console.error('Upload failed', err);
-                    alert('Failed to upload image. Please check console for details.');
+                    toast.error('Failed to upload image');
                 }
             }
         };
@@ -88,6 +99,8 @@ const ImageNode = ({ node, updateAttributes, deleteNode }: any) => {
 
 // Extend Image extension to use React Component
 const CustomImage = Image.extend({
+    inline: false,
+    group: 'block',
     addNodeView() {
         return ReactNodeViewRenderer(ImageNode);
     },
@@ -117,13 +130,14 @@ interface LiveArticleEditorProps {
 export default function LiveArticleEditor({ article: initialArticle, onSave }: LiveArticleEditorProps) {
     const [article, setArticle] = useState(initialArticle);
     const [saving, setSaving] = useState(false);
-    const [heroHovered, setHeroHovered] = useState(false);
+    const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
+    const titleRef = useRef<HTMLTextAreaElement>(null);
+    const subtitleRef = useRef<HTMLTextAreaElement>(null);
 
     const editor = useEditor({
         extensions: [
             StarterKit,
             CustomImage.configure({
-                inline: true,
                 allowBase64: true,
             }),
             ImportantUpdateExtension,
@@ -141,6 +155,27 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
             setArticle(prev => ({ ...prev, content: editor.getHTML() }));
         },
     });
+
+    // Auto-resize textareas on mount
+    useEffect(() => {
+        const resizeTextareas = () => {
+            requestAnimationFrame(() => {
+                if (titleRef.current) {
+                    titleRef.current.style.height = 'auto';
+                    titleRef.current.style.height = titleRef.current.scrollHeight + 'px';
+                }
+                if (subtitleRef.current) {
+                    subtitleRef.current.style.height = 'auto';
+                    subtitleRef.current.style.height = subtitleRef.current.scrollHeight + 'px';
+                }
+            });
+        };
+
+        // Run immediately and after a short delay for fonts to load
+        resizeTextareas();
+        const timer = setTimeout(resizeTextareas, 100);
+        return () => clearTimeout(timer);
+    }, []);
 
     const addImage = useCallback(async () => {
         const input = document.createElement('input');
@@ -160,7 +195,7 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                     }
                 } catch (err) {
                     console.error('Upload failed', err);
-                    alert('Failed to upload image. Please check console for details.');
+                    toast.error('Failed to upload image');
                 }
             }
         };
@@ -182,10 +217,11 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                     const data = await res.json();
                     if (data.url) {
                         setArticle(prev => ({ ...prev, image: data.url }));
+                        toast.success('Cover image updated');
                     }
                 } catch (err) {
                     console.error('Upload failed', err);
-                    alert('Failed to upload image. Please check console for details.');
+                    toast.error('Failed to upload image');
                 }
             }
         };
@@ -194,13 +230,18 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
 
     const handleSave = async () => {
         setSaving(true);
-        // Ensure keyTakeaways is null if undefined so it gets sent in JSON
-        const articleToSave = {
-            ...article,
-            keyTakeaways: article.keyTakeaways || null
-        };
-        await onSave(articleToSave);
-        setSaving(false);
+        try {
+            const articleToSave = {
+                ...article,
+                keyTakeaways: article.keyTakeaways || null
+            };
+            await onSave(articleToSave);
+            toast.success('Article saved successfully');
+        } catch (err) {
+            toast.error('Failed to save article');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const updateKeyTakeaway = (index: number, field: 'title' | 'content', value: string) => {
@@ -210,44 +251,34 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
         setArticle({ ...article, keyTakeaways: newTakeaways });
     };
 
+    const handleTextareaChange = (
+        e: React.ChangeEvent<HTMLTextAreaElement>,
+        field: 'title' | 'subtitle'
+    ) => {
+        setArticle({ ...article, [field]: e.target.value });
+        // Auto-resize
+        e.target.style.height = 'auto';
+        e.target.style.height = e.target.scrollHeight + 'px';
+    };
+
     if (!editor) return null;
 
-    return (
-        <div className="min-h-screen bg-white pb-20 font-serif relative">
-            {/* Fixed Save Bar */}
-            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-[100] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex items-center justify-between">
-                <div className="text-sm text-gray-500 font-sans">
-                    Editing: <span className="font-bold text-gray-900">{article.title}</span>
-                </div>
-                <div className="flex gap-3">
-                    <Link href="/admin" className="px-6 py-2 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors font-sans">
-                        Cancel
-                    </Link>
-                    <button
-                        onClick={handleSave}
-                        disabled={saving}
-                        className={`px-8 py-2 rounded-lg text-sm font-bold text-white font-sans transition-all ${saving ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 shadow-md hover:shadow-lg'
-                            }`}
-                    >
-                        {saving ? 'Saving...' : 'Save Changes'}
-                    </button>
-                </div>
-            </div>
-
-            <ArticleHeader transparent={true} />
-
+    // Article preview content - shared between mobile and desktop
+    const ArticlePreview = (
+        <>
             {/* Cinematic Hero (Editable) */}
             <div className="relative group">
                 <div className="absolute top-4 right-4 z-50 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
+                    <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={handleHeroReplace}
-                        className="bg-white/90 backdrop-blur text-gray-900 px-4 py-2 rounded-lg text-xs font-bold shadow-lg hover:bg-white transition-colors"
+                        className="bg-white/90 backdrop-blur text-gray-900 shadow-lg hover:bg-white"
                     >
                         Replace Cover Image
-                    </button>
+                    </Button>
                 </div>
 
-                {/* We render the CinematicHero but overlay inputs for editing */}
                 <div className="relative w-full min-h-[85vh] sm:min-h-[85vh] flex items-end pb-24 sm:pb-20 overflow-hidden">
                     {/* Background Image */}
                     <div className="absolute inset-0 z-0">
@@ -260,7 +291,7 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                     </div>
 
                     {/* Content Overlay */}
-                    <div className="relative z-10 w-full max-w-3xl mx-auto px-5 sm:px-6">
+                    <div className="relative z-10 w-full max-w-3xl mx-auto px-5 sm:px-6 pt-24 sm:pt-20">
                         <div className="flex flex-wrap items-center gap-3 mb-6">
                             <span className="px-3 py-1 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm shadow-sm">
                                 Investigative Report
@@ -268,7 +299,7 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                             <span className="px-3 py-1 bg-white/10 backdrop-blur-sm text-white/90 text-[10px] font-bold uppercase tracking-widest rounded-sm border border-white/20">
                                 5 Min Read
                             </span>
-                            {/* Integrated Trust Badges */}
+                            {/* Trust Badges */}
                             <div className="flex items-center gap-2 flex-wrap">
                                 <span className="flex items-center gap-1 text-[10px] font-bold text-green-400 uppercase tracking-wider">
                                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
@@ -282,26 +313,19 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                         </div>
 
                         <textarea
+                            ref={titleRef}
                             value={article.title}
-                            onChange={(e) => {
-                                setArticle({ ...article, title: e.target.value });
-                                e.target.style.height = 'auto';
-                                e.target.style.height = e.target.scrollHeight + 'px';
-                            }}
-                            className="w-full text-4xl sm:text-4xl md:text-5xl lg:text-6xl font-serif font-black text-white leading-[1.2] mb-6 tracking-tight drop-shadow-lg bg-transparent border-none focus:ring-0 p-0 resize-none overflow-hidden placeholder-white/50 break-words hyphens-auto"
+                            onChange={(e) => handleTextareaChange(e, 'title')}
+                            className="w-full text-4xl sm:text-4xl md:text-5xl lg:text-6xl font-serif font-black text-white leading-[1.2] mb-6 tracking-tight drop-shadow-lg bg-transparent border-none focus:ring-0 focus:outline-none p-0 resize-none overflow-hidden placeholder-white/50 break-words hyphens-auto"
                             placeholder="Article Title"
                             rows={1}
-                            style={{ height: 'auto' }}
                         />
 
                         <textarea
+                            ref={subtitleRef}
                             value={article.subtitle}
-                            onChange={(e) => {
-                                setArticle({ ...article, subtitle: e.target.value });
-                                e.target.style.height = 'auto';
-                                e.target.style.height = e.target.scrollHeight + 'px';
-                            }}
-                            className="w-full text-lg sm:text-xl text-gray-200 font-sans font-light leading-relaxed mb-8 max-w-xl drop-shadow-md bg-transparent border-none focus:ring-0 p-0 resize-none overflow-hidden placeholder-gray-400"
+                            onChange={(e) => handleTextareaChange(e, 'subtitle')}
+                            className="w-full text-lg sm:text-xl text-gray-200 font-sans font-light leading-relaxed mb-8 max-w-xl drop-shadow-md bg-transparent border-none focus:ring-0 focus:outline-none p-0 resize-none overflow-hidden placeholder-gray-400"
                             placeholder="Article Subtitle"
                             rows={2}
                         />
@@ -315,16 +339,16 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                                     className="w-full h-full rounded-full object-cover"
                                 />
                             </div>
-                            <div className="flex flex-col">
+                            <div className="flex flex-col min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
                                     <input
                                         type="text"
                                         value={article.author}
                                         onChange={(e) => setArticle({ ...article, author: e.target.value })}
-                                        className="text-white font-bold text-sm tracking-wide bg-transparent border-none focus:ring-0 p-0 w-auto placeholder-gray-400"
+                                        className="text-white font-bold text-sm tracking-wide bg-transparent border-none focus:ring-0 focus:outline-none p-0 min-w-0 flex-1 placeholder-gray-400"
                                         placeholder="Author Name"
                                     />
-                                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-blue-400" aria-label="Verified">
+                                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-blue-400 flex-shrink-0" aria-label="Verified">
                                         <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
                                     </svg>
                                 </div>
@@ -333,7 +357,7 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                                         type="text"
                                         value={article.date}
                                         onChange={(e) => setArticle({ ...article, date: e.target.value })}
-                                        className="bg-transparent border-none focus:ring-0 p-0 w-24 placeholder-gray-500 text-gray-400"
+                                        className="bg-transparent border-none focus:ring-0 focus:outline-none p-0 min-w-0 flex-1 placeholder-gray-500 text-gray-400"
                                         placeholder="Date"
                                     />
                                 </div>
@@ -351,8 +375,8 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                         <div className="absolute top-2 right-2 flex items-center gap-2">
                             <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Editable Section</span>
                             <button
-                                onClick={() => setArticle({ ...article, keyTakeaways: undefined })} // Keep as undefined for UI hiding, but we need to handle save
-                                className="bg-red-100 hover:bg-red-200 text-red-600 p-1 rounded transition-colors"
+                                onClick={() => setArticle({ ...article, keyTakeaways: undefined })}
+                                className="bg-red-100 hover:bg-red-200 text-red-600 p-1 rounded transition-colors opacity-0 group-hover:opacity-100"
                                 title="Remove Section"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -375,7 +399,7 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                                             type="text"
                                             value={item.title}
                                             onChange={(e) => updateKeyTakeaway(index, 'title', e.target.value)}
-                                            className="font-bold bg-transparent border-none focus:ring-0 p-0 w-full mb-1"
+                                            className="font-bold bg-transparent border-none focus:ring-0 focus:outline-none p-0 w-full mb-1"
                                             placeholder="Title"
                                         />
                                         <textarea
@@ -385,7 +409,7 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                                                 e.target.style.height = 'auto';
                                                 e.target.style.height = e.target.scrollHeight + 'px';
                                             }}
-                                            className="w-full bg-transparent border-none focus:ring-0 p-0 resize-none overflow-hidden text-gray-800"
+                                            className="w-full bg-transparent border-none focus:ring-0 focus:outline-none p-0 resize-none overflow-hidden text-gray-800"
                                             rows={2}
                                             placeholder="Content"
                                         />
@@ -436,7 +460,7 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                         type="text"
                         value={article.ctaTitle || "Curious about the science?"}
                         onChange={(e) => setArticle({ ...article, ctaTitle: e.target.value })}
-                        className="w-full text-xl font-serif mb-4 text-gray-900 font-medium bg-transparent border-none focus:ring-0 p-0 text-center placeholder-blue-300"
+                        className="w-full text-xl font-serif mb-4 text-gray-900 font-medium bg-transparent border-none focus:ring-0 focus:outline-none p-0 text-center placeholder-blue-300"
                     />
                     <input
                         type="text"
@@ -448,10 +472,125 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                         type="text"
                         value={article.ctaDescription || "Secure, verified link to official research."}
                         onChange={(e) => setArticle({ ...article, ctaDescription: e.target.value })}
-                        className="w-full mt-4 text-xs text-gray-500 font-sans bg-transparent border-none focus:ring-0 p-0 text-center placeholder-gray-400"
+                        className="w-full mt-4 text-xs text-gray-500 font-sans bg-transparent border-none focus:ring-0 focus:outline-none p-0 text-center placeholder-gray-400"
                     />
                 </div>
             </main>
+        </>
+    );
+
+    return (
+        <div className="min-h-screen bg-zinc-100">
+            {/* Fixed Top Toolbar */}
+            <div className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-zinc-200 z-[100] shadow-sm">
+                <div className="max-w-screen-2xl mx-auto px-4 h-14 flex items-center justify-between">
+                    {/* Left: Back + Title */}
+                    <div className="flex items-center gap-3 min-w-0">
+                        <Button variant="ghost" size="sm" asChild className="text-zinc-600 hover:text-zinc-900">
+                            <Link href="/admin">
+                                <ArrowLeft className="h-4 w-4 mr-1" />
+                                Back
+                            </Link>
+                        </Button>
+                        <div className="h-6 w-px bg-zinc-200 hidden sm:block" />
+                        <span className="text-sm font-medium text-zinc-700 truncate max-w-[200px] sm:max-w-[400px] hidden sm:block">
+                            {article.title}
+                        </span>
+                    </div>
+
+                    {/* Center: Preview Mode Toggle */}
+                    <div className="flex items-center gap-1 bg-zinc-100 rounded-lg p-1">
+                        <Button
+                            variant={previewMode === 'desktop' ? 'default' : 'ghost'}
+                            size="sm"
+                            onClick={() => setPreviewMode('desktop')}
+                            className={cn(
+                                'gap-1.5',
+                                previewMode === 'desktop' 
+                                    ? 'bg-white shadow-sm text-zinc-900' 
+                                    : 'text-zinc-600 hover:text-zinc-900 hover:bg-transparent'
+                            )}
+                        >
+                            <Monitor className="h-4 w-4" />
+                            <span className="hidden sm:inline">Desktop</span>
+                        </Button>
+                        <Button
+                            variant={previewMode === 'mobile' ? 'default' : 'ghost'}
+                            size="sm"
+                            onClick={() => setPreviewMode('mobile')}
+                            className={cn(
+                                'gap-1.5',
+                                previewMode === 'mobile' 
+                                    ? 'bg-white shadow-sm text-zinc-900' 
+                                    : 'text-zinc-600 hover:text-zinc-900 hover:bg-transparent'
+                            )}
+                        >
+                            <Smartphone className="h-4 w-4" />
+                            <span className="hidden sm:inline">Mobile</span>
+                        </Button>
+                    </div>
+
+                    {/* Right: Actions */}
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" asChild className="border-zinc-200 text-zinc-600 hover:text-zinc-900 hidden sm:flex">
+                            <a href={`/articles/${article.slug}`} target="_blank">
+                                <ExternalLink className="h-4 w-4 mr-1" />
+                                View Live
+                            </a>
+                        </Button>
+                        <Button
+                            onClick={handleSave}
+                            disabled={saving}
+                            size="sm"
+                            className="bg-zinc-900 hover:bg-zinc-800 text-white"
+                        >
+                            {saving ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                    Saving...
+                                </>
+                            ) : (
+                                <>
+                                    <Save className="h-4 w-4 mr-1" />
+                                    Save
+                                </>
+                            )}
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Preview Area */}
+            <div className="pt-14">
+                {previewMode === 'desktop' ? (
+                    // Desktop Preview - Full Width
+                    <div className="min-h-screen bg-white font-serif">
+                        {ArticlePreview}
+                    </div>
+                ) : (
+                    // Mobile Preview - iPhone Frame
+                    <div className="flex justify-center py-8 px-4">
+                        <div className="relative">
+                            {/* iPhone Frame */}
+                            <div className="relative w-[375px] h-[812px] bg-black rounded-[3rem] p-3 shadow-2xl">
+                                {/* Dynamic Island / Notch */}
+                                <div className="absolute top-6 left-1/2 -translate-x-1/2 w-[100px] h-[30px] bg-black rounded-full z-50" />
+                                {/* Screen */}
+                                <div className="w-full h-full bg-white rounded-[2.5rem] overflow-hidden">
+                                    <div className="w-full h-full overflow-y-auto font-serif" style={{ scrollbarWidth: 'none' }}>
+                                        {ArticlePreview}
+                                    </div>
+                                </div>
+                            </div>
+                            {/* Side Buttons */}
+                            <div className="absolute right-[-3px] top-[120px] w-[3px] h-[60px] bg-zinc-700 rounded-l" />
+                            <div className="absolute left-[-3px] top-[100px] w-[3px] h-[30px] bg-zinc-700 rounded-r" />
+                            <div className="absolute left-[-3px] top-[150px] w-[3px] h-[50px] bg-zinc-700 rounded-r" />
+                            <div className="absolute left-[-3px] top-[210px] w-[3px] h-[50px] bg-zinc-700 rounded-r" />
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
