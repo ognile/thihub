@@ -9,6 +9,7 @@ import {
     LogOut,
     ChevronLeft,
     Menu,
+    ListChecks,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -34,6 +35,11 @@ const navItems = [
         title: 'Create Article',
         href: '/admin/create',
         icon: PlusCircle,
+    },
+    {
+        title: 'Quiz Funnels',
+        href: '/admin/quizzes',
+        icon: ListChecks,
     },
 ];
 
