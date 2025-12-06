@@ -24,9 +24,18 @@ export default Node.create({
                     { week: 4, title: 'Visible Results', description: 'Significant improvements in overall gut health and wellbeing.' },
                     { week: 8, title: 'Lasting Benefits', description: 'Long-term benefits become established with continued use.' },
                 ],
+                parseHTML: element => {
+                    const attr = element.getAttribute('data-weeks')
+                    try {
+                        return attr ? JSON.parse(attr) : null
+                    } catch {
+                        return null
+                    }
+                },
             },
             title: {
                 default: 'Your Journey to Better Health',
+                parseHTML: element => element.getAttribute('data-title'),
             },
         }
     },
@@ -64,7 +73,12 @@ export default Node.create({
             ]
         })
 
-        return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'timeline', class: 'my-10' }),
+        return ['div', mergeAttributes(HTMLAttributes, { 
+            'data-type': 'timeline', 
+            'data-weeks': JSON.stringify(weeks),
+            'data-title': title,
+            class: 'my-10' 
+        }),
             // Section Header
             ['div', { class: 'flex items-center gap-3 mb-6' },
                 ['div', { class: 'w-10 h-10 rounded-full bg-gradient-to-br from-emerald-100 to-teal-50 flex items-center justify-center' },
@@ -91,4 +105,3 @@ export default Node.create({
         return ReactNodeViewRenderer(TimelineNode)
     },
 })
-

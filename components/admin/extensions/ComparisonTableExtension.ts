@@ -24,12 +24,22 @@ export default Node.create({
                     { name: 'No Artificial Fillers', us: true, them: false },
                     { name: '60-Day Guarantee', us: true, them: false },
                 ],
+                parseHTML: element => {
+                    const attr = element.getAttribute('data-features')
+                    try {
+                        return attr ? JSON.parse(attr) : null
+                    } catch {
+                        return null
+                    }
+                },
             },
             ourBrand: {
                 default: 'Our Formula',
+                parseHTML: element => element.getAttribute('data-our-brand'),
             },
             theirBrand: {
                 default: 'Generic Brands',
+                parseHTML: element => element.getAttribute('data-their-brand'),
             },
         }
     },
@@ -82,7 +92,13 @@ export default Node.create({
             ]
         })
 
-        return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'comparison-table', class: 'my-10' }),
+        return ['div', mergeAttributes(HTMLAttributes, { 
+            'data-type': 'comparison-table', 
+            'data-features': JSON.stringify(features),
+            'data-our-brand': ourBrand,
+            'data-their-brand': theirBrand,
+            class: 'my-10' 
+        }),
             ['div', { class: 'bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden' },
                 // Header
                 ['div', { class: 'grid grid-cols-[1fr,100px,100px] sm:grid-cols-[1fr,140px,140px] bg-gradient-to-r from-slate-50 to-slate-100 border-b border-gray-200' },
@@ -106,4 +122,3 @@ export default Node.create({
         return ReactNodeViewRenderer(ComparisonTableNode)
     },
 })
-

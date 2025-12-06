@@ -13,9 +13,11 @@ export default Node.create({
         return {
             searchQuery: {
                 default: 'relevant image',
+                parseHTML: element => element.getAttribute('data-search-query'),
             },
             imageUrl: {
                 default: '',
+                parseHTML: element => element.getAttribute('data-image-url'),
             },
         }
     },
@@ -33,7 +35,12 @@ export default Node.create({
 
         // If we have an image, render it
         if (imageUrl) {
-            return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'image-placeholder', class: 'my-8' }),
+            return ['div', mergeAttributes(HTMLAttributes, { 
+                'data-type': 'image-placeholder', 
+                'data-search-query': searchQuery,
+                'data-image-url': imageUrl,
+                class: 'my-8' 
+            }),
                 ['img', { 
                     src: imageUrl, 
                     alt: searchQuery, 
@@ -43,7 +50,12 @@ export default Node.create({
         }
 
         // Render placeholder
-        return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'image-placeholder', class: 'my-8' }),
+        return ['div', mergeAttributes(HTMLAttributes, { 
+            'data-type': 'image-placeholder', 
+            'data-search-query': searchQuery,
+            'data-image-url': imageUrl,
+            class: 'my-8' 
+        }),
             ['div', { class: 'relative overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-slate-100 p-8 sm:p-12' },
                 ['div', { class: 'flex flex-col items-center text-center' },
                     // Icon
@@ -75,4 +87,3 @@ export default Node.create({
         return ReactNodeViewRenderer(ImagePlaceholderNode)
     },
 })
-

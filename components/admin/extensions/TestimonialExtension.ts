@@ -13,18 +13,26 @@ export default Node.create({
         return {
             helpedWith: {
                 default: 'Better Sleep',
+                parseHTML: element => element.getAttribute('data-helped-with'),
             },
             title: {
                 default: 'I finally feel like myself again!',
+                parseHTML: element => element.getAttribute('data-title'),
             },
             body: {
                 default: 'After struggling for years, I found this solution and it changed everything. Highly recommended!',
+                parseHTML: element => element.getAttribute('data-body'),
             },
             author: {
                 default: 'Sarah J.',
+                parseHTML: element => element.getAttribute('data-author'),
             },
             verified: {
                 default: true,
+                parseHTML: element => {
+                    const attr = element.getAttribute('data-verified')
+                    return attr === 'true'
+                },
             },
         }
     },
@@ -37,10 +45,18 @@ export default Node.create({
         ]
     },
 
-    renderHTML({ HTMLAttributes }) {
-        const { helpedWith, title, body, author } = HTMLAttributes
+    renderHTML({ HTMLAttributes, node }) {
+        const { helpedWith, title, body, author, verified } = node.attrs
 
-        return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'testimonial', class: 'my-12' }),
+        return ['div', mergeAttributes(HTMLAttributes, { 
+            'data-type': 'testimonial', 
+            'data-helped-with': helpedWith,
+            'data-title': title,
+            'data-body': body,
+            'data-author': author,
+            'data-verified': verified.toString(),
+            class: 'my-12' 
+        }),
             ['div', { class: 'bg-gradient-to-br from-blue-50 to-white p-8 rounded-2xl border border-blue-100 shadow-sm relative overflow-hidden' },
                 // Quote Icon (Background)
                 ['div', { class: 'absolute top-4 right-4 text-blue-100 opacity-50 pointer-events-none' },
@@ -67,12 +83,12 @@ export default Node.create({
                         ['div', { class: 'w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm' }, author.charAt(0)],
                         ['div', { class: 'flex flex-col' },
                             ['span', { class: 'text-sm font-bold text-gray-900' }, author],
-                            ['div', { class: 'flex items-center gap-1 text-green-600' },
+                            verified ? ['div', { class: 'flex items-center gap-1 text-green-600' },
                                 ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: '12', height: '12', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
                                     ['polyline', { points: '20 6 9 17 4 12' }]
                                 ],
                                 ['span', { class: 'text-[10px] font-bold uppercase tracking-wider' }, 'Verified Purchase']
-                            ]
+                            ] : null
                         ]
                     ],
                     // Stars

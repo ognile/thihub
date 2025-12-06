@@ -31,9 +31,21 @@ export default Node.create({
                     { icon: 'shield', title: 'Clinically Tested', text: 'Backed by peer-reviewed research and clinical trials.' },
                     { icon: 'check', title: 'Premium Ingredients', text: 'Only the highest quality, bioavailable compounds.' },
                 ],
+                parseHTML: element => {
+                    const attr = element.getAttribute('data-items')
+                    try {
+                        return attr ? JSON.parse(attr) : null
+                    } catch {
+                        return null
+                    }
+                },
             },
             columns: {
                 default: 2,
+                parseHTML: element => {
+                    const attr = element.getAttribute('data-columns')
+                    return attr ? parseInt(attr) : 2
+                },
             },
         }
     },
@@ -68,7 +80,12 @@ export default Node.create({
             ]
         })
 
-        return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'icon-list', class: 'my-10' }),
+        return ['div', mergeAttributes(HTMLAttributes, { 
+            'data-type': 'icon-list', 
+            'data-items': JSON.stringify(items),
+            'data-columns': columns,
+            class: 'my-10' 
+        }),
             ['div', { class: `grid gap-4 sm:gap-6 ${gridCols[columns as number] || gridCols[2]}` },
                 ...itemElements
             ]
@@ -79,4 +96,3 @@ export default Node.create({
         return ReactNodeViewRenderer(IconListNode)
     },
 })
-
