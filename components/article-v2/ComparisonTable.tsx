@@ -24,65 +24,63 @@ export default function ComparisonTable({
     className
 }: ComparisonTableProps) {
     return (
-        <div className={cn('my-10', className)}>
+        <div className={cn('my-8 not-prose', className)}>
             {/* Table Container */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden ring-1 ring-gray-950/5">
                 {/* Header */}
-                <div className="grid grid-cols-[1fr,100px,100px] sm:grid-cols-[1fr,140px,140px] bg-gradient-to-r from-slate-50 to-slate-100 border-b border-gray-200">
-                    <div className="p-4 sm:p-5">
-                        <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Feature</span>
+                <div className="grid grid-cols-[1fr,auto,auto] bg-gray-50/50 border-b border-gray-200 divide-x divide-gray-200">
+                    <div className="p-3 pl-4 flex items-center">
+                        <span className="text-[10px] uppercase tracking-widest font-bold text-gray-500">Feature</span>
                     </div>
-                    <div className="p-4 sm:p-5 text-center border-l border-gray-200 bg-emerald-50/50">
-                        <span className="text-xs sm:text-sm font-bold text-emerald-700">{ourBrand}</span>
+                    <div className="p-3 w-24 sm:w-32 text-center bg-emerald-50/30">
+                        <span className="text-xs sm:text-sm font-bold text-emerald-800 leading-tight block">{ourBrand}</span>
                     </div>
-                    <div className="p-4 sm:p-5 text-center border-l border-gray-200">
-                        <span className="text-xs sm:text-sm font-bold text-gray-500">{theirBrand}</span>
+                    <div className="p-3 w-24 sm:w-32 text-center bg-gray-50/50">
+                        <span className="text-xs sm:text-sm font-bold text-gray-500 leading-tight block">{theirBrand}</span>
                     </div>
                 </div>
 
                 {/* Rows */}
-                {features.map((feature, index) => (
-                    <div
-                        key={index}
-                        className={cn(
-                            'grid grid-cols-[1fr,100px,100px] sm:grid-cols-[1fr,140px,140px]',
-                            index !== features.length - 1 && 'border-b border-gray-100'
-                        )}
-                    >
-                        {/* Feature Name */}
-                        <div className="p-4 sm:p-5 flex items-center">
-                            <span className="text-sm sm:text-base text-gray-800 font-medium">{feature.name}</span>
-                        </div>
+                <div className="divide-y divide-gray-100">
+                    {features.map((feature, index) => (
+                        <div
+                            key={index}
+                            className="grid grid-cols-[1fr,auto,auto] divide-x divide-gray-100 transition-colors hover:bg-gray-50/50"
+                        >
+                            {/* Feature Name */}
+                            <div className="p-3 pl-4 flex items-center">
+                                <span className="text-xs sm:text-sm text-gray-700 font-medium leading-snug">{feature.name}</span>
+                            </div>
 
-                        {/* Our Brand */}
-                        <div className="p-4 sm:p-5 flex items-center justify-center border-l border-gray-100 bg-emerald-50/30">
-                            {feature.us ? (
-                                <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-                                    <Check className="w-5 h-5 text-emerald-600" strokeWidth={3} />
-                                </div>
-                            ) : (
-                                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                                    <X className="w-5 h-5 text-gray-400" strokeWidth={3} />
-                                </div>
-                            )}
-                        </div>
+                            {/* Our Brand */}
+                            <div className="p-3 w-24 sm:w-32 flex items-center justify-center bg-emerald-50/10">
+                                {feature.us ? (
+                                    <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center shadow-sm">
+                                        <Check className="w-3.5 h-3.5 text-emerald-600" strokeWidth={3} />
+                                    </div>
+                                ) : (
+                                    <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center">
+                                        <X className="w-3.5 h-3.5 text-gray-400" strokeWidth={3} />
+                                    </div>
+                                )}
+                            </div>
 
-                        {/* Their Brand */}
-                        <div className="p-4 sm:p-5 flex items-center justify-center border-l border-gray-100">
-                            {feature.them ? (
-                                <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-                                    <Check className="w-5 h-5 text-emerald-600" strokeWidth={3} />
-                                </div>
-                            ) : (
-                                <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center">
-                                    <X className="w-5 h-5 text-red-400" strokeWidth={3} />
-                                </div>
-                            )}
+                            {/* Their Brand */}
+                            <div className="p-3 w-24 sm:w-32 flex items-center justify-center">
+                                {feature.them ? (
+                                    <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center shadow-sm">
+                                        <Check className="w-3.5 h-3.5 text-emerald-600" strokeWidth={3} />
+                                    </div>
+                                ) : (
+                                    <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center">
+                                        <X className="w-3.5 h-3.5 text-gray-400" strokeWidth={3} />
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    ))}
+                </div>
             </div>
         </div>
     );
 }
-

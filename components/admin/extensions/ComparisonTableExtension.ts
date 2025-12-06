@@ -61,37 +61,37 @@ export default Node.create({
         // Build the table rows
         const rows = (safeFeatures as ComparisonFeature[]).map((feature) => {
             const usIcon = feature.us
-                ? ['div', { class: 'w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center' },
-                    ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: '20', height: '20', viewBox: '0 0 24 24', fill: 'none', stroke: '#059669', 'stroke-width': '3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+                ? ['div', { class: 'w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center shadow-sm' },
+                    ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: '14', height: '14', viewBox: '0 0 24 24', fill: 'none', stroke: '#059669', 'stroke-width': '3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
                         ['polyline', { points: '20 6 9 17 4 12' }]
                     ]
                   ]
-                : ['div', { class: 'w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center' },
-                    ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: '20', height: '20', viewBox: '0 0 24 24', fill: 'none', stroke: '#9ca3af', 'stroke-width': '3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+                : ['div', { class: 'w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center' },
+                    ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: '14', height: '14', viewBox: '0 0 24 24', fill: 'none', stroke: '#9ca3af', 'stroke-width': '3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
                         ['line', { x1: '18', y1: '6', x2: '6', y2: '18' }],
                         ['line', { x1: '6', y1: '6', x2: '18', y2: '18' }]
                     ]
                   ]
 
             const themIcon = feature.them
-                ? ['div', { class: 'w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center' },
-                    ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: '20', height: '20', viewBox: '0 0 24 24', fill: 'none', stroke: '#059669', 'stroke-width': '3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+                ? ['div', { class: 'w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center shadow-sm' },
+                    ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: '14', height: '14', viewBox: '0 0 24 24', fill: 'none', stroke: '#059669', 'stroke-width': '3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
                         ['polyline', { points: '20 6 9 17 4 12' }]
                     ]
                   ]
-                : ['div', { class: 'w-8 h-8 rounded-full bg-red-50 flex items-center justify-center' },
-                    ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: '20', height: '20', viewBox: '0 0 24 24', fill: 'none', stroke: '#f87171', 'stroke-width': '3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+                : ['div', { class: 'w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center' },
+                    ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: '14', height: '14', viewBox: '0 0 24 24', fill: 'none', stroke: '#9ca3af', 'stroke-width': '3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
                         ['line', { x1: '18', y1: '6', x2: '6', y2: '18' }],
                         ['line', { x1: '6', y1: '6', x2: '18', y2: '18' }]
                     ]
                   ]
 
-            return ['div', { class: 'grid grid-cols-[1fr,100px,100px] sm:grid-cols-[1fr,140px,140px] border-b border-gray-100 last:border-b-0' },
-                ['div', { class: 'p-4 sm:p-5 flex items-center' },
-                    ['span', { class: 'text-sm sm:text-base text-gray-800 font-medium' }, feature.name]
+            return ['div', { class: 'grid grid-cols-[1fr,auto,auto] divide-x divide-gray-100' },
+                ['div', { class: 'p-3 pl-4 flex items-center' },
+                    ['span', { class: 'text-xs sm:text-sm text-gray-700 font-medium leading-snug' }, feature.name]
                 ],
-                ['div', { class: 'p-4 sm:p-5 flex items-center justify-center border-l border-gray-100 bg-emerald-50/30' }, usIcon],
-                ['div', { class: 'p-4 sm:p-5 flex items-center justify-center border-l border-gray-100' }, themIcon]
+                ['div', { class: 'p-3 w-24 sm:w-32 flex items-center justify-center bg-emerald-50/10' }, usIcon],
+                ['div', { class: 'p-3 w-24 sm:w-32 flex items-center justify-center' }, themIcon]
             ]
         })
 
@@ -100,23 +100,25 @@ export default Node.create({
             'data-features': JSON.stringify(safeFeatures),
             'data-our-brand': ourBrand,
             'data-their-brand': theirBrand,
-            class: 'my-10' 
+            class: 'my-8 not-prose' 
         }),
-            ['div', { class: 'bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden' },
+            ['div', { class: 'bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden ring-1 ring-gray-950/5' },
                 // Header
-                ['div', { class: 'grid grid-cols-[1fr,100px,100px] sm:grid-cols-[1fr,140px,140px] bg-gradient-to-r from-slate-50 to-slate-100 border-b border-gray-200' },
-                    ['div', { class: 'p-4 sm:p-5' },
-                        ['span', { class: 'text-xs font-bold uppercase tracking-wider text-gray-500' }, 'Feature']
+                ['div', { class: 'grid grid-cols-[1fr,auto,auto] bg-gray-50/50 border-b border-gray-200 divide-x divide-gray-200' },
+                    ['div', { class: 'p-3 pl-4 flex items-center' },
+                        ['span', { class: 'text-[10px] uppercase tracking-widest font-bold text-gray-500' }, 'Feature']
                     ],
-                    ['div', { class: 'p-4 sm:p-5 text-center border-l border-gray-200 bg-emerald-50/50' },
-                        ['span', { class: 'text-xs sm:text-sm font-bold text-emerald-700' }, ourBrand]
+                    ['div', { class: 'p-3 w-24 sm:w-32 text-center bg-emerald-50/30' },
+                        ['span', { class: 'text-xs sm:text-sm font-bold text-emerald-800 leading-tight block' }, ourBrand]
                     ],
-                    ['div', { class: 'p-4 sm:p-5 text-center border-l border-gray-200' },
-                        ['span', { class: 'text-xs sm:text-sm font-bold text-gray-500' }, theirBrand]
+                    ['div', { class: 'p-3 w-24 sm:w-32 text-center bg-gray-50/50' },
+                        ['span', { class: 'text-xs sm:text-sm font-bold text-gray-500 leading-tight block' }, theirBrand]
                     ]
                 ],
                 // Rows
-                ...rows
+                ['div', { class: 'divide-y divide-gray-100' },
+                    ...rows
+                ]
             ]
         ]
     },
