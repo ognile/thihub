@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import LiveArticleEditor from '@/components/admin/LiveArticleEditor';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface Article {
     slug: string;
@@ -33,20 +35,24 @@ export default function EditArticlePage() {
 
         const fetchArticle = async () => {
             try {
-                const res = await fetch('/api/articles', { cache: 'no-store' });
-                const data: Article[] = await res.json();
-                const found = data.find(a => a.slug === slug);
-
-                if (found) {
-                    setArticle(found);
-                    setLoading(false);
-                } else if (retries < maxRetries) {
-                    // Retry after a delay
-                    retries++;
-                    setTimeout(fetchArticle, 1000 * retries); // Exponential backoff
-                } else {
-                    alert('Article not found');
+                // Use the optimized single-article endpoint
+                const res = await fetch(`/api/articles/${slug}`, { cache: 'no-store' });
+                
+                if (res.status === 404) {
+                    if (retries < maxRetries) {
+                        retries++;
+                        setTimeout(fetchArticle, 1000 * retries);
+                        return;
+                    }
+                    toast.error('Article not found');
                     router.push('/admin');
+                    setLoading(false);
+                    return;
+                }
+
+                if (res.ok) {
+                    const data = await res.json();
+                    setArticle(data);
                     setLoading(false);
                 }
             } catch (err) {
@@ -55,6 +61,7 @@ export default function EditArticlePage() {
                     retries++;
                     setTimeout(fetchArticle, 1000 * retries);
                 } else {
+                    toast.error('Failed to load article');
                     setLoading(false);
                 }
             }
@@ -64,26 +71,35 @@ export default function EditArticlePage() {
     }, [slug, router]);
 
     const handleSave = async (updatedArticle: Article) => {
-        try {
-            const res = await fetch('/api/articles', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedArticle),
-            });
-            if (res.ok) {
-                alert('Saved successfully!');
-            } else {
-                alert('Failed to save');
-            }
-        } catch (e) {
-            alert('Error saving');
+        const res = await fetch('/api/articles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedArticle),
+        });
+        if (!res.ok) {
+            throw new Error('Failed to save');
         }
     };
 
-    if (loading) return <div className="flex items-center justify-center min-h-screen text-gray-500">Loading...</div>;
-    if (!article) return <div className="flex items-center justify-center min-h-screen text-gray-500">Article not found</div>;
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-muted/30 p-6">
+                <div className="max-w-4xl mx-auto space-y-4">
+                    <Skeleton className="h-12 w-64" />
+                    <Skeleton className="h-[60vh] w-full rounded-xl" />
+                    <Skeleton className="h-32 w-full" />
+                </div>
+            </div>
+        );
+    }
 
-    return (
-        <LiveArticleEditor article={article} onSave={handleSave} />
-    );
+    if (!article) {
+        return (
+            <div className="flex items-center justify-center min-h-screen text-muted-foreground">
+                Article not found
+            </div>
+        );
+    }
+
+    return <LiveArticleEditor article={article} onSave={handleSave} />;
 }

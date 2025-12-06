@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 
 export default function usePixelEvents() {
+    const hasFiredViewContent = useRef(false);
     const hasFiredHalf = useRef(false);
     const hasFiredFull = useRef(false);
 
@@ -16,6 +17,16 @@ export default function usePixelEvents() {
                     console.log(`[Pixel] Fired: ${eventName}`, data);
                 });
         };
+
+        // 0. ViewContent - Fire on article page load (standard FB Pixel best practice)
+        if (!hasFiredViewContent.current) {
+            trackEvent('ViewContent', {
+                content_type: 'article',
+                content_name: document.title,
+                content_category: 'Health Article',
+            });
+            hasFiredViewContent.current = true;
+        }
 
         // 1. Lead Tracking (Click on any link)
         const handleLinkClick = (e: MouseEvent) => {

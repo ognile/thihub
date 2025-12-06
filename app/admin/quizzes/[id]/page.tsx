@@ -58,23 +58,6 @@ import {
     Upload,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-    DndContext,
-    closestCenter,
-    KeyboardSensor,
-    PointerSensor,
-    useSensor,
-    useSensors,
-    DragEndEvent,
-} from '@dnd-kit/core';
-import {
-    arrayMove,
-    SortableContext,
-    sortableKeyboardCoordinates,
-    useSortable,
-    verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 
 // Types
 interface SlideOption {
@@ -82,22 +65,6 @@ interface SlideOption {
     text: string;
     imageUrl?: string;
     nextSlide?: string | 'next' | 'end';
-    category?: string; // For scoring/results
-}
-
-interface ContentBlock {
-    id: string;
-    type: 'heading' | 'paragraph' | 'image' | 'quote';
-    content: string;
-    author?: string; // for quote blocks
-}
-
-interface ResultCategory {
-    id: string;
-    name: string;
-    headline: string;
-    body: string;
-    imageUrl?: string;
 }
 
 interface SlideContent {
@@ -116,10 +83,6 @@ interface SlideContent {
     ctaText?: string;
     ctaUrl?: string;
     guaranteeText?: string;
-    // Flexible content blocks for info slides
-    blocks?: ContentBlock[];
-    // Dynamic results
-    resultCategories?: ResultCategory[];
 }
 
 interface Slide {
@@ -158,100 +121,6 @@ function generateId() {
     return Math.random().toString(36).substring(2, 9);
 }
 
-// Sortable Slide Item Component
-function SortableSlideItem({
-    slide,
-    index,
-    isSelected,
-    onSelect,
-    onDuplicate,
-    onDelete,
-    canDelete,
-}: {
-    slide: Slide;
-    index: number;
-    isSelected: boolean;
-    onSelect: () => void;
-    onDuplicate: () => void;
-    onDelete: () => void;
-    canDelete: boolean;
-}) {
-    const {
-        attributes,
-        listeners,
-        setNodeRef,
-        transform,
-        transition,
-        isDragging,
-    } = useSortable({ id: slide.id });
-
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.5 : 1,
-    };
-
-    return (
-        <div
-            ref={setNodeRef}
-            style={style}
-            onClick={onSelect}
-            className={cn(
-                'group flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors',
-                isSelected ? 'bg-accent' : 'hover:bg-accent/50',
-                isDragging && 'shadow-lg ring-2 ring-primary/20'
-            )}
-        >
-            {/* Drag Handle */}
-            <button
-                className="touch-none cursor-grab active:cursor-grabbing p-1 rounded hover:bg-muted"
-                {...attributes}
-                {...listeners}
-            >
-                <GripVertical className="h-4 w-4 text-muted-foreground" />
-            </button>
-            
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-                <span className="text-xs text-muted-foreground w-4 shrink-0">{index + 1}</span>
-                <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                        {slide.content.headline || 'Untitled'}
-                    </p>
-                    <p className="text-xs text-muted-foreground capitalize">
-                        {slide.type.replace('-', ' ')}
-                    </p>
-                </div>
-            </div>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <MoreVertical className="h-3 w-3" />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDuplicate(); }}>
-                        <Copy className="mr-2 h-4 w-4" />
-                        Duplicate
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                        disabled={!canDelete}
-                        className="text-destructive focus:text-destructive"
-                    >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-        </div>
-    );
-}
-
 function getDefaultContent(type: string): SlideContent {
     switch (type) {
         case 'text-choice':
@@ -279,9 +148,8 @@ function getDefaultContent(type: string): SlideContent {
         case 'info':
             return {
                 headline: 'Important Information',
-                blocks: [
-                    { id: generateId(), type: 'paragraph', content: 'Add your story or educational content here...' },
-                ],
+                body: 'Add your story or educational content here...',
+                imageUrl: '',
                 buttonText: 'Continue',
             };
         case 'loading':
@@ -297,10 +165,8 @@ function getDefaultContent(type: string): SlideContent {
             return {
                 headline: 'Your Results',
                 body: 'Based on your answers, here is what we found...',
-                resultCategories: [
-                    { id: generateId(), name: 'Type A', headline: 'You are Type A!', body: 'Description for Type A results...' },
-                    { id: generateId(), name: 'Type B', headline: 'You are Type B!', body: 'Description for Type B results...' },
-                ],
+                summaryTemplate: '',
+                dynamicFields: [],
             };
         case 'offer':
             return {
@@ -464,41 +330,6 @@ export default function QuizBuilder({ params }: { params: Promise<{ id: string }
         updateSlideContent('options', options);
     };
 
-    // Drag and drop handlers
-    const sensors = useSensors(
-        useSensor(PointerSensor, {
-            activationConstraint: {
-                distance: 8,
-            },
-        }),
-        useSensor(KeyboardSensor, {
-            coordinateGetter: sortableKeyboardCoordinates,
-        })
-    );
-
-    const handleDragEnd = (event: DragEndEvent) => {
-        const { active, over } = event;
-        
-        if (!over || active.id === over.id || !quiz) return;
-        
-        const oldIndex = quiz.slides.findIndex(s => s.id === active.id);
-        const newIndex = quiz.slides.findIndex(s => s.id === over.id);
-        
-        if (oldIndex !== -1 && newIndex !== -1) {
-            const newSlides = arrayMove(quiz.slides, oldIndex, newIndex);
-            setQuiz({ ...quiz, slides: newSlides });
-            
-            // Update selected slide index if needed
-            if (selectedSlideIndex === oldIndex) {
-                setSelectedSlideIndex(newIndex);
-            } else if (selectedSlideIndex > oldIndex && selectedSlideIndex <= newIndex) {
-                setSelectedSlideIndex(selectedSlideIndex - 1);
-            } else if (selectedSlideIndex < oldIndex && selectedSlideIndex >= newIndex) {
-                setSelectedSlideIndex(selectedSlideIndex + 1);
-            }
-        }
-    };
-
     const selectedSlide = quiz?.slides[selectedSlideIndex];
 
     if (isLoading) {
@@ -596,29 +427,64 @@ export default function QuizBuilder({ params }: { params: Promise<{ id: string }
                     </div>
                     <ScrollArea className="flex-1">
                         <div className="p-2 space-y-1">
-                            <DndContext
-                                sensors={sensors}
-                                collisionDetection={closestCenter}
-                                onDragEnd={handleDragEnd}
-                            >
-                                <SortableContext
-                                    items={quiz.slides.map(s => s.id)}
-                                    strategy={verticalListSortingStrategy}
+                            {quiz.slides.map((slide, index) => (
+                                <div
+                                    key={slide.id}
+                                    onClick={() => setSelectedSlideIndex(index)}
+                                    className={cn(
+                                        'group flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors',
+                                        selectedSlideIndex === index
+                                            ? 'bg-accent'
+                                            : 'hover:bg-accent/50'
+                                    )}
                                 >
-                                    {quiz.slides.map((slide, index) => (
-                                        <SortableSlideItem
-                                            key={slide.id}
-                                            slide={slide}
-                                            index={index}
-                                            isSelected={selectedSlideIndex === index}
-                                            onSelect={() => setSelectedSlideIndex(index)}
-                                            onDuplicate={() => duplicateSlide(index)}
-                                            onDelete={() => deleteSlide(index)}
-                                            canDelete={quiz.slides.length > 1}
-                                        />
-                                    ))}
-                                </SortableContext>
-                            </DndContext>
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <span className="text-xs text-muted-foreground w-4 shrink-0">{index + 1}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium truncate">
+                                                {slide.content.headline || 'Untitled'}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground capitalize">
+                                                {slide.type.replace('-', ' ')}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <MoreVertical className="h-3 w-3" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem onClick={() => moveSlide(index, 'up')} disabled={index === 0}>
+                                                <ChevronUp className="mr-2 h-4 w-4" />
+                                                Move Up
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => moveSlide(index, 'down')} disabled={index === quiz.slides.length - 1}>
+                                                <ChevronDown className="mr-2 h-4 w-4" />
+                                                Move Down
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => duplicateSlide(index)}>
+                                                <Copy className="mr-2 h-4 w-4" />
+                                                Duplicate
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={() => deleteSlide(index)}
+                                                disabled={quiz.slides.length <= 1}
+                                                className="text-destructive focus:text-destructive"
+                                            >
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                Delete
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            ))}
                         </div>
                     </ScrollArea>
                 </div>
@@ -779,29 +645,6 @@ export default function QuizBuilder({ params }: { params: Promise<{ id: string }
     );
 }
 
-// Helper function to upload image to Supabase Storage
-async function uploadImage(file: File): Promise<string | null> {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    try {
-        const res = await fetch('/api/upload', {
-            method: 'POST',
-            body: formData,
-        });
-        
-        if (!res.ok) {
-            throw new Error('Upload failed');
-        }
-        
-        const data = await res.json();
-        return data.url;
-    } catch (error) {
-        console.error('Image upload error:', error);
-        return null;
-    }
-}
-
 // Slide Preview Component
 function SlidePreview({
     slide,
@@ -841,10 +684,9 @@ function SlidePreview({
                     contentEditable
                     suppressContentEditableWarning
                     onBlur={(e) => onContentChange('headline', e.currentTarget.textContent || '')}
-                    className="text-2xl font-bold text-gray-900 mb-3 outline-none focus:bg-blue-50 focus:ring-2 focus:ring-blue-200 rounded px-1 -mx-1 cursor-text hover:bg-gray-50 transition-colors"
-                    title="Click to edit headline"
+                    className="text-2xl font-bold text-gray-900 mb-3 outline-none focus:bg-blue-50 rounded px-1 -mx-1"
                 >
-                    {slide.content.headline || 'Add headline...'}
+                    {slide.content.headline}
                 </h1>
             )}
 
@@ -854,204 +696,48 @@ function SlidePreview({
                     contentEditable
                     suppressContentEditableWarning
                     onBlur={(e) => onContentChange('subheadline', e.currentTarget.textContent || '')}
-                    className="text-gray-600 mb-6 outline-none focus:bg-blue-50 focus:ring-2 focus:ring-blue-200 rounded px-1 -mx-1 cursor-text hover:bg-gray-50 transition-colors"
-                    title="Click to edit subheadline"
+                    className="text-gray-600 mb-6 outline-none focus:bg-blue-50 rounded px-1 -mx-1"
                 >
                     {slide.content.subheadline || 'Add a subheadline...'}
                 </p>
             )}
 
-            {/* Legacy Body - for info slides without blocks */}
-            {slide.content.body !== undefined && !slide.content.blocks && (
+            {/* Body - for info slides */}
+            {slide.content.body !== undefined && (
                 <div
                     contentEditable
                     suppressContentEditableWarning
                     onBlur={(e) => onContentChange('body', e.currentTarget.textContent || '')}
-                    className="text-gray-700 leading-relaxed mb-6 outline-none focus:bg-blue-50 focus:ring-2 focus:ring-blue-200 rounded px-1 -mx-1 whitespace-pre-wrap cursor-text hover:bg-gray-50 transition-colors"
-                    title="Click to edit body text"
+                    className="text-gray-700 leading-relaxed mb-6 outline-none focus:bg-blue-50 rounded px-1 -mx-1 whitespace-pre-wrap"
                 >
                     {slide.content.body || 'Add body text...'}
                 </div>
             )}
 
-            {/* Content Blocks - for info slides */}
-            {slide.type === 'info' && slide.content.blocks && (
-                <div className="space-y-4 mb-6">
-                    {slide.content.blocks.map((block, blockIndex) => (
-                        <div key={block.id} className="group/block relative">
-                            {block.type === 'heading' && (
-                                <h2
-                                    contentEditable
-                                    suppressContentEditableWarning
-                                    onBlur={(e) => {
-                                        const blocks = [...(slide.content.blocks || [])];
-                                        blocks[blockIndex] = { ...blocks[blockIndex], content: e.currentTarget.textContent || '' };
-                                        onContentChange('blocks', blocks);
-                                    }}
-                                    className="text-xl font-bold text-gray-900 outline-none focus:bg-blue-50 focus:ring-2 focus:ring-blue-200 rounded px-1 -mx-1 cursor-text hover:bg-gray-50 transition-colors"
-                                >
-                                    {block.content || 'Add heading...'}
-                                </h2>
-                            )}
-                            {block.type === 'paragraph' && (
-                                <p
-                                    contentEditable
-                                    suppressContentEditableWarning
-                                    onBlur={(e) => {
-                                        const blocks = [...(slide.content.blocks || [])];
-                                        blocks[blockIndex] = { ...blocks[blockIndex], content: e.currentTarget.textContent || '' };
-                                        onContentChange('blocks', blocks);
-                                    }}
-                                    className="text-gray-700 leading-relaxed outline-none focus:bg-blue-50 focus:ring-2 focus:ring-blue-200 rounded px-1 -mx-1 whitespace-pre-wrap cursor-text hover:bg-gray-50 transition-colors"
-                                >
-                                    {block.content || 'Add paragraph...'}
-                                </p>
-                            )}
-                            {block.type === 'image' && (
-                                <label className="block rounded-lg overflow-hidden cursor-pointer relative">
-                                    {block.content ? (
-                                        <>
-                                            <img src={block.content} alt="" className="w-full h-40 object-cover rounded-lg" />
-                                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/block:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
-                                                <span className="text-white font-medium text-sm flex items-center gap-2">
-                                                    <Upload className="h-4 w-4" />
-                                                    Replace
-                                                </span>
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <div className="w-full h-32 bg-muted border-2 border-dashed border-muted-foreground/30 rounded-lg flex flex-col items-center justify-center gap-2 hover:border-muted-foreground/50 transition-colors">
-                                            <ImageIcon className="h-6 w-6 text-muted-foreground/50" />
-                                            <span className="text-xs text-muted-foreground">Click to add</span>
-                                        </div>
-                                    )}
-                                    <input
-                                        type="file"
-                                        className="hidden"
-                                        accept="image/*"
-                                        onChange={async (e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) {
-                                                const url = await uploadImage(file);
-                                                if (url) {
-                                                    const blocks = [...(slide.content.blocks || [])];
-                                                    blocks[blockIndex] = { ...blocks[blockIndex], content: url };
-                                                    onContentChange('blocks', blocks);
-                                                }
-                                            }
-                                        }}
-                                    />
-                                </label>
-                            )}
-                            {block.type === 'quote' && (
-                                <div className="border-l-4 pl-4 py-2" style={{ borderColor: primaryColor }}>
-                                    <p
-                                        contentEditable
-                                        suppressContentEditableWarning
-                                        onBlur={(e) => {
-                                            const blocks = [...(slide.content.blocks || [])];
-                                            blocks[blockIndex] = { ...blocks[blockIndex], content: e.currentTarget.textContent || '' };
-                                            onContentChange('blocks', blocks);
-                                        }}
-                                        className="text-gray-700 italic outline-none focus:bg-blue-50 rounded cursor-text hover:bg-gray-50 transition-colors"
-                                    >
-                                        {block.content || 'Add quote...'}
-                                    </p>
-                                    {block.author !== undefined && (
-                                        <p
-                                            contentEditable
-                                            suppressContentEditableWarning
-                                            onBlur={(e) => {
-                                                const blocks = [...(slide.content.blocks || [])];
-                                                blocks[blockIndex] = { ...blocks[blockIndex], author: e.currentTarget.textContent || '' };
-                                                onContentChange('blocks', blocks);
-                                            }}
-                                            className="text-sm text-gray-500 mt-1 outline-none focus:bg-blue-50 rounded cursor-text"
-                                        >
-                                            — {block.author || 'Author name'}
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    ))}
+            {/* Image */}
+            {slide.content.imageUrl && (
+                <div className="mb-6 rounded-lg overflow-hidden">
+                    <img src={slide.content.imageUrl} alt="" className="w-full h-48 object-cover" />
                 </div>
-            )}
-
-            {/* Image - Click to replace (for results slides) */}
-            {slide.type === 'results' && (
-                <label className="mb-6 block rounded-lg overflow-hidden cursor-pointer group relative">
-                    {slide.content.imageUrl ? (
-                        <>
-                            <img src={slide.content.imageUrl} alt="" className="w-full h-48 object-cover" />
-                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                <span className="text-white font-medium text-sm flex items-center gap-2">
-                                    <Upload className="h-4 w-4" />
-                                    Click to replace
-                                </span>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="w-full h-32 bg-muted border-2 border-dashed border-muted-foreground/30 rounded-lg flex flex-col items-center justify-center gap-2 hover:border-muted-foreground/50 transition-colors">
-                            <ImageIcon className="h-8 w-8 text-muted-foreground/50" />
-                            <span className="text-sm text-muted-foreground">Click to add image</span>
-                        </div>
-                    )}
-                    <input
-                        type="file"
-                        className="hidden"
-                        accept="image/*"
-                        onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                                const url = await uploadImage(file);
-                                if (url) onContentChange('imageUrl', url);
-                            }
-                        }}
-                    />
-                </label>
             )}
 
             {/* Options - for choice slides */}
             {slide.content.options && (
-                <div className={cn(
-                    "mb-6",
-                    slide.type === 'image-choice' 
-                        ? slide.content.options.length === 4 
-                            ? "grid grid-cols-2 gap-3" 
-                            : "grid grid-cols-3 gap-2"
-                        : "space-y-3"
-                )}>
+                <div className="space-y-3 mb-6">
                     {slide.content.options.map((option, index) => (
                         <button
                             key={option.id}
-                            className={cn(
-                                "text-left border-2 rounded-xl transition-all hover:border-gray-400 group relative",
-                                slide.type === 'image-choice' 
-                                    ? "p-2 flex flex-col" 
-                                    : "w-full p-4"
-                            )}
+                            className="w-full p-4 text-left border-2 rounded-xl transition-all hover:border-gray-400 group relative"
                             style={{ borderColor: '#e5e7eb' }}
                         >
-                            {slide.type === 'image-choice' && (
-                                <div className="aspect-square w-full rounded-lg overflow-hidden mb-2 bg-muted">
-                                    {option.imageUrl ? (
-                                        <img src={option.imageUrl} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center">
-                                            <ImageIcon className="h-8 w-8 text-muted-foreground/50" />
-                                        </div>
-                                    )}
-                                </div>
+                            {slide.type === 'image-choice' && option.imageUrl && (
+                                <img src={option.imageUrl} alt="" className="w-full h-24 object-cover rounded-lg mb-2" />
                             )}
                             <span
                                 contentEditable
                                 suppressContentEditableWarning
                                 onBlur={(e) => onOptionChange(index, 'text', e.currentTarget.textContent || '')}
-                                className={cn(
-                                    "font-medium outline-none focus:bg-blue-50 rounded",
-                                    slide.type === 'image-choice' && "text-sm text-center block"
-                                )}
+                                className="font-medium outline-none focus:bg-blue-50 rounded"
                             >
                                 {option.text}
                             </span>
@@ -1182,149 +868,19 @@ function SlidePropertiesPanel({
     onAddOption: () => void;
     onRemoveOption: (index: number) => void;
 }) {
-    const [uploadingImage, setUploadingImage] = useState<string | null>(null);
-    
     const handleImageUpload = async (key: string, file: File) => {
-        setUploadingImage(key);
-        const url = await uploadImage(file);
-        if (url) {
-            onContentChange(key, url);
-        } else {
-            toast.error('Failed to upload image');
-        }
-        setUploadingImage(null);
-    };
-    
-    const handleOptionImageUpload = async (index: number, file: File) => {
-        setUploadingImage(`option-${index}`);
-        const url = await uploadImage(file);
-        if (url) {
-            onOptionChange(index, 'imageUrl', url);
-        } else {
-            toast.error('Failed to upload image');
-        }
-        setUploadingImage(null);
-    };
-
-    const addBlock = (type: ContentBlock['type']) => {
-        const blocks = [...(slide.content.blocks || [])];
-        const newBlock: ContentBlock = {
-            id: Math.random().toString(36).substring(2, 9),
-            type,
-            content: '',
-            ...(type === 'quote' ? { author: '' } : {}),
+        // TODO: Implement actual upload
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            onContentChange(key, e.target?.result as string);
         };
-        blocks.push(newBlock);
-        onContentChange('blocks', blocks);
-    };
-
-    const removeBlock = (blockIndex: number) => {
-        const blocks = slide.content.blocks?.filter((_, i) => i !== blockIndex);
-        onContentChange('blocks', blocks);
-    };
-
-    const moveBlock = (blockIndex: number, direction: 'up' | 'down') => {
-        const blocks = [...(slide.content.blocks || [])];
-        const newIndex = direction === 'up' ? blockIndex - 1 : blockIndex + 1;
-        if (newIndex < 0 || newIndex >= blocks.length) return;
-        [blocks[blockIndex], blocks[newIndex]] = [blocks[newIndex], blocks[blockIndex]];
-        onContentChange('blocks', blocks);
+        reader.readAsDataURL(file);
     };
 
     return (
         <div className="p-4 space-y-6">
-            {/* Content Blocks for Info slides */}
-            {slide.type === 'info' && (
-                <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                        <Label>Content Blocks</Label>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm">
-                                    <Plus className="h-4 w-4 mr-1" />
-                                    Add
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => addBlock('heading')}>
-                                    <Type className="mr-2 h-4 w-4" />
-                                    Heading
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => addBlock('paragraph')}>
-                                    <FileText className="mr-2 h-4 w-4" />
-                                    Paragraph
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => addBlock('image')}>
-                                    <ImageIcon className="mr-2 h-4 w-4" />
-                                    Image
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => addBlock('quote')}>
-                                    <Award className="mr-2 h-4 w-4" />
-                                    Quote / Testimonial
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
-                    
-                    {(slide.content.blocks || []).map((block, blockIndex) => (
-                        <div key={block.id} className="flex items-start gap-2 p-2 border rounded-lg bg-muted/30">
-                            <div className="flex flex-col gap-1">
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-5 w-5"
-                                    onClick={() => moveBlock(blockIndex, 'up')}
-                                    disabled={blockIndex === 0}
-                                >
-                                    <ChevronUp className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-5 w-5"
-                                    onClick={() => moveBlock(blockIndex, 'down')}
-                                    disabled={blockIndex === (slide.content.blocks?.length || 0) - 1}
-                                >
-                                    <ChevronDown className="h-3 w-3" />
-                                </Button>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="text-xs font-medium text-muted-foreground capitalize">
-                                        {block.type}
-                                    </span>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-5 w-5"
-                                        onClick={() => removeBlock(blockIndex)}
-                                    >
-                                        <Trash2 className="h-3 w-3" />
-                                    </Button>
-                                </div>
-                                {block.type === 'image' ? (
-                                    block.content ? (
-                                        <img src={block.content} alt="" className="w-full h-16 object-cover rounded" />
-                                    ) : (
-                                        <div className="text-xs text-muted-foreground">Click in preview to add</div>
-                                    )
-                                ) : (
-                                    <p className="text-sm truncate">{block.content || '(empty)'}</p>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                    
-                    {(!slide.content.blocks || slide.content.blocks.length === 0) && (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                            No content blocks yet. Add one above.
-                        </p>
-                    )}
-                </div>
-            )}
-
-            {/* Image Upload for results slides */}
-            {slide.type === 'results' && (
+            {/* Image Upload for relevant slides */}
+            {(slide.type === 'info' || slide.type === 'results') && (
                 <div className="space-y-2">
                     <Label>Slide Image</Label>
                     {slide.content.imageUrl ? (
@@ -1340,26 +896,13 @@ function SlidePropertiesPanel({
                             </Button>
                         </div>
                     ) : (
-                        <label className={cn(
-                            "flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-accent/50 transition-colors",
-                            uploadingImage === 'imageUrl' && "opacity-50 cursor-not-allowed"
-                        )}>
-                            {uploadingImage === 'imageUrl' ? (
-                                <>
-                                    <Loader2 className="h-6 w-6 text-muted-foreground mb-2 animate-spin" />
-                                    <span className="text-sm text-muted-foreground">Uploading...</span>
-                                </>
-                            ) : (
-                                <>
-                                    <Upload className="h-6 w-6 text-muted-foreground mb-2" />
-                                    <span className="text-sm text-muted-foreground">Upload Image</span>
-                                </>
-                            )}
+                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-accent/50 transition-colors">
+                            <Upload className="h-6 w-6 text-muted-foreground mb-2" />
+                            <span className="text-sm text-muted-foreground">Upload Image</span>
                             <input
                                 type="file"
                                 className="hidden"
                                 accept="image/*"
-                                disabled={uploadingImage === 'imageUrl'}
                                 onChange={(e) => {
                                     const file = e.target.files?.[0];
                                     if (file) handleImageUpload('imageUrl', file);
@@ -1381,151 +924,41 @@ function SlidePropertiesPanel({
                         </Button>
                     </div>
                     {slide.content.options.map((option, index) => (
-                        <div key={option.id} className="space-y-2">
-                            <div className="flex items-center gap-2">
-                                <Input
-                                    value={option.text}
-                                    onChange={(e) => onOptionChange(index, 'text', e.target.value)}
-                                    className="flex-1"
-                                />
-                                {slide.type === 'image-choice' && (
-                                    <label className={cn(
-                                        "cursor-pointer p-2 rounded hover:bg-accent",
-                                        uploadingImage === `option-${index}` && "opacity-50"
-                                    )}>
-                                        {uploadingImage === `option-${index}` ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                        ) : (
-                                            <ImageIcon className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                                        )}
-                                        <input
-                                            type="file"
-                                            className="hidden"
-                                            accept="image/*"
-                                            disabled={uploadingImage === `option-${index}`}
-                                            onChange={(e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) handleOptionImageUpload(index, file);
-                                            }}
-                                        />
-                                    </label>
-                                )}
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 shrink-0"
-                                    onClick={() => onRemoveOption(index)}
-                                    disabled={slide.content.options!.length <= 2}
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                            </div>
-                            {/* Show image preview for image-choice */}
-                            {slide.type === 'image-choice' && option.imageUrl && (
-                                <div className="relative ml-0">
-                                    <img 
-                                        src={option.imageUrl} 
-                                        alt={option.text} 
-                                        className="w-full h-20 object-cover rounded-lg border"
-                                    />
-                                    <Button
-                                        variant="destructive"
-                                        size="icon"
-                                        className="absolute top-1 right-1 h-5 w-5"
-                                        onClick={() => onOptionChange(index, 'imageUrl', '')}
-                                    >
-                                        <Trash2 className="h-3 w-3" />
-                                    </Button>
-                                </div>
-                            )}
-                            {/* Category for scoring */}
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground w-16 shrink-0">Category:</span>
-                                <Input
-                                    value={option.category || ''}
-                                    onChange={(e) => onOptionChange(index, 'category', e.target.value)}
-                                    placeholder="e.g., Type A"
-                                    className="h-7 text-xs"
-                                />
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {/* Results Categories Editor */}
-            {slide.type === 'results' && (
-                <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                        <Label>Result Categories</Label>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                                const categories = [...(slide.content.resultCategories || [])];
-                                categories.push({
-                                    id: Math.random().toString(36).substring(2, 9),
-                                    name: `Category ${categories.length + 1}`,
-                                    headline: 'Result Headline',
-                                    body: 'Result description...',
-                                });
-                                onContentChange('resultCategories', categories);
-                            }}
-                        >
-                            <Plus className="h-4 w-4 mr-1" />
-                            Add
-                        </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        Assign categories to quiz options. The category with the most selections wins.
-                    </p>
-                    {(slide.content.resultCategories || []).map((category, catIndex) => (
-                        <div key={category.id} className="space-y-2 p-3 border rounded-lg bg-muted/30">
-                            <div className="flex items-center justify-between">
-                                <Input
-                                    value={category.name}
-                                    onChange={(e) => {
-                                        const cats = [...(slide.content.resultCategories || [])];
-                                        cats[catIndex] = { ...cats[catIndex], name: e.target.value };
-                                        onContentChange('resultCategories', cats);
-                                    }}
-                                    placeholder="Category Name"
-                                    className="h-7 text-sm font-medium w-32"
-                                />
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6"
-                                    onClick={() => {
-                                        const cats = slide.content.resultCategories?.filter((_, i) => i !== catIndex);
-                                        onContentChange('resultCategories', cats);
-                                    }}
-                                    disabled={(slide.content.resultCategories?.length || 0) <= 1}
-                                >
-                                    <Trash2 className="h-3 w-3" />
-                                </Button>
-                            </div>
+                        <div key={option.id} className="flex items-center gap-2">
                             <Input
-                                value={category.headline}
-                                onChange={(e) => {
-                                    const cats = [...(slide.content.resultCategories || [])];
-                                    cats[catIndex] = { ...cats[catIndex], headline: e.target.value };
-                                    onContentChange('resultCategories', cats);
-                                }}
-                                placeholder="Headline for this result"
-                                className="text-sm"
+                                value={option.text}
+                                onChange={(e) => onOptionChange(index, 'text', e.target.value)}
+                                className="flex-1"
                             />
-                            <Textarea
-                                value={category.body}
-                                onChange={(e) => {
-                                    const cats = [...(slide.content.resultCategories || [])];
-                                    cats[catIndex] = { ...cats[catIndex], body: e.target.value };
-                                    onContentChange('resultCategories', cats);
-                                }}
-                                placeholder="Description for this result..."
-                                rows={2}
-                                className="text-sm"
-                            />
+                            {slide.type === 'image-choice' && (
+                                <label className="cursor-pointer">
+                                    <ImageIcon className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                const reader = new FileReader();
+                                                reader.onload = (evt) => {
+                                                    onOptionChange(index, 'imageUrl', evt.target?.result);
+                                                };
+                                                reader.readAsDataURL(file);
+                                            }
+                                        }}
+                                    />
+                                </label>
+                            )}
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 shrink-0"
+                                onClick={() => onRemoveOption(index)}
+                                disabled={slide.content.options!.length <= 2}
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
                         </div>
                     ))}
                 </div>

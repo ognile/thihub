@@ -1,28 +1,31 @@
 import React from 'react';
 import ArticleHeader from '@/components/ArticleHeader';
-import TrustBadge from '@/components/TrustBadge';
 import KeyTakeaways from '@/components/KeyTakeaways';
 import FBComments from '@/components/FBComments';
 import PixelTracker from '@/components/PixelTracker';
 import UrlPreserver from '@/components/UrlPreserver';
 import CinematicHero from '@/components/CinematicHero';
+import { StickyCTA } from '@/components/article-v2';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-// Get article from API (which handles both local files and Blob storage)
+// Get single article from API (optimized - fetches only the requested article)
 async function getArticle(slug: string) {
     try {
-        // Use relative URL - works in both local and production
-        const response = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/articles`, {
+        const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || '';
+        const response = await fetch(`${baseUrl}/api/articles/${slug}`, {
             cache: 'no-store'
         });
 
-        if (!response.ok) {
-            throw new Error('Failed to fetch articles');
+        if (response.status === 404) {
+            return null;
         }
 
-        const articles = await response.json();
-        return articles.find((a: any) => a.slug === slug) || null;
+        if (!response.ok) {
+            throw new Error('Failed to fetch article');
+        }
+
+        return await response.json();
     } catch (e) {
         console.error('Error fetching article:', e);
     }
@@ -47,6 +50,18 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
             <UrlPreserver />
             <ArticleHeader transparent={true} />
 
+            {/* Sticky CTA (conditionally rendered based on article settings) */}
+            {article.stickyCTAEnabled && (
+                <StickyCTA
+                    productName={article.stickyCTAProductName || article.title}
+                    ctaLink={ctaUrl}
+                    price={article.stickyCTAPrice}
+                    originalPrice={article.stickyCTAOriginalPrice}
+                    ctaText={article.stickyCTAText || 'Try Risk-Free'}
+                    enabled={true}
+                />
+            )}
+
             {/* Cinematic Hero Section */}
             <CinematicHero
                 image={article.image}
@@ -54,7 +69,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
                 subtitle={article.subtitle}
                 author={article.author}
                 date={article.date}
-                authorImage="https://picsum.photos/seed/doc/100" // We might want to make this dynamic later
+                authorImage="https://picsum.photos/seed/doc/100"
             />
 
             <main className="px-5 max-w-[680px] mx-auto -mt-20 relative z-20 bg-white rounded-t-3xl shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] pt-10 sm:pt-12">
@@ -64,7 +79,6 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
 
                 {/* Article Content */}
                 <article className="prose prose-lg max-w-none text-gray-800 font-serif leading-loose prose-h2:mb-4 prose-h3:mb-3 prose-p:mt-2 prose-img:my-8">
-                    {/* Removed duplicate hero image */}
                     <div dangerouslySetInnerHTML={{ __html: article.content }} />
                 </article>
 

@@ -183,4 +183,3 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </TooltipProvider>
     );
 }
-

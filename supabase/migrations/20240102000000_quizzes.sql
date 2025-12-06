@@ -118,4 +118,3 @@ CREATE POLICY "Anyone can insert responses" ON quiz_responses
 CREATE POLICY "Users can view their own responses" ON quiz_responses
     FOR SELECT USING (true);
 
-

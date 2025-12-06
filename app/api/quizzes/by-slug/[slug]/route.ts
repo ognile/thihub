@@ -8,20 +8,9 @@ export async function GET(
 ) {
     try {
         const { slug } = await params;
-        console.log('Fetching quiz by slug:', slug);
-        
         const supabase = await createClient();
         
-        // First, try to find the quiz by slug (any status for debugging)
-        const { data: quizCheck, error: checkError } = await supabase
-            .from('quizzes')
-            .select('id, slug, status')
-            .eq('slug', slug)
-            .single();
-            
-        console.log('Quiz check result:', quizCheck, 'Error:', checkError);
-        
-        // Now fetch only published
+        // Fetch published quiz by slug
         const { data: quiz, error: quizError } = await supabase
             .from('quizzes')
             .select('*')
@@ -30,15 +19,7 @@ export async function GET(
             .single();
 
         if (quizError) {
-            console.log('Quiz fetch error:', quizError);
             if (quizError.code === 'PGRST116') {
-                // Check if quiz exists but isn't published
-                if (quizCheck && quizCheck.status !== 'published') {
-                    return NextResponse.json({ 
-                        error: 'Quiz exists but is not published', 
-                        status: quizCheck.status 
-                    }, { status: 404 });
-                }
                 return NextResponse.json({ error: 'Quiz not found' }, { status: 404 });
             }
             throw quizError;
@@ -51,13 +32,8 @@ export async function GET(
             .eq('quiz_id', quiz.id)
             .order('slide_order', { ascending: true });
 
-        if (slidesError) {
-            console.log('Slides fetch error:', slidesError);
-            throw slidesError;
-        }
+        if (slidesError) throw slidesError;
 
-        console.log('Returning quiz with', slides?.length || 0, 'slides');
-        
         return NextResponse.json({
             ...quiz,
             slides: slides || []

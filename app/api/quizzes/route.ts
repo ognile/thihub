@@ -15,7 +15,16 @@ export async function GET() {
             `)
             .order('created_at', { ascending: false });
 
-        if (error) throw error;
+        // Check if table doesn't exist
+        if (error) {
+            if (error.code === '42P01' || error.message?.includes('does not exist')) {
+                return NextResponse.json({ 
+                    error: 'Tables not set up', 
+                    needsSetup: true 
+                }, { status: 200 });
+            }
+            throw error;
+        }
 
         // Transform the response to include counts
         const transformedQuizzes = quizzes?.map(quiz => ({
@@ -25,8 +34,15 @@ export async function GET() {
         }));
 
         return NextResponse.json(transformedQuizzes || []);
-    } catch (e) {
+    } catch (e: any) {
         console.error('Error fetching quizzes:', e);
+        // Also check for table not existing in catch
+        if (e?.code === '42P01' || e?.message?.includes('does not exist')) {
+            return NextResponse.json({ 
+                error: 'Tables not set up', 
+                needsSetup: true 
+            }, { status: 200 });
+        }
         return NextResponse.json({ error: 'Failed to fetch quizzes' }, { status: 500 });
     }
 }
@@ -65,7 +81,7 @@ export async function POST(request: Request) {
                     primaryColor: '#0F4C81',
                     backgroundColor: '#ffffff',
                     showProgressBar: true,
-                    allowBack: true
+                    allowBack: false
                 },
                 status: 'draft'
             })
