@@ -27,15 +27,15 @@ export default Node.create({
                 parseHTML: element => {
                     const attr = element.getAttribute('data-weeks')
                     try {
-                        return attr ? JSON.parse(attr) : null
+                        return attr ? JSON.parse(attr) : undefined
                     } catch {
-                        return null
+                        return undefined
                     }
                 },
             },
             title: {
                 default: 'Your Journey to Better Health',
-                parseHTML: element => element.getAttribute('data-title'),
+                parseHTML: element => element.getAttribute('data-title') || undefined,
             },
         }
     },
@@ -51,7 +51,11 @@ export default Node.create({
     renderHTML({ HTMLAttributes, node }) {
         const { weeks, title } = node.attrs
 
-        const weekElements = (weeks as TimelineWeek[]).map((item) => {
+        // Safety check - if weeks is missing or invalid, use empty array to avoid crash
+        // This shouldn't happen with correct parseHTML, but extra safety
+        const safeWeeks = Array.isArray(weeks) ? weeks : []
+
+        const weekElements = (safeWeeks as TimelineWeek[]).map((item) => {
             return ['div', { class: 'relative pl-14' },
                 // Timeline Node
                 ['div', { class: 'absolute left-0 top-1 w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg z-10' },
@@ -75,7 +79,7 @@ export default Node.create({
 
         return ['div', mergeAttributes(HTMLAttributes, { 
             'data-type': 'timeline', 
-            'data-weeks': JSON.stringify(weeks),
+            'data-weeks': JSON.stringify(safeWeeks),
             'data-title': title,
             class: 'my-10' 
         }),

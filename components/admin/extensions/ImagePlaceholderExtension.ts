@@ -13,11 +13,11 @@ export default Node.create({
         return {
             searchQuery: {
                 default: 'relevant image',
-                parseHTML: element => element.getAttribute('data-search-query'),
+                parseHTML: element => element.getAttribute('data-search-query') || undefined,
             },
             imageUrl: {
                 default: '',
-                parseHTML: element => element.getAttribute('data-image-url'),
+                parseHTML: element => element.getAttribute('data-image-url') || undefined,
             },
         }
     },

@@ -13,25 +13,25 @@ export default Node.create({
         return {
             helpedWith: {
                 default: 'Better Sleep',
-                parseHTML: element => element.getAttribute('data-helped-with'),
+                parseHTML: element => element.getAttribute('data-helped-with') || 'Better Sleep',
             },
             title: {
                 default: 'I finally feel like myself again!',
-                parseHTML: element => element.getAttribute('data-title'),
+                parseHTML: element => element.getAttribute('data-title') || 'I finally feel like myself again!',
             },
             body: {
                 default: 'After struggling for years, I found this solution and it changed everything. Highly recommended!',
-                parseHTML: element => element.getAttribute('data-body'),
+                parseHTML: element => element.getAttribute('data-body') || 'After struggling for years, I found this solution and it changed everything. Highly recommended!',
             },
             author: {
                 default: 'Sarah J.',
-                parseHTML: element => element.getAttribute('data-author'),
+                parseHTML: element => element.getAttribute('data-author') || 'Sarah J.',
             },
             verified: {
                 default: true,
                 parseHTML: element => {
                     const attr = element.getAttribute('data-verified')
-                    return attr === 'true'
+                    return attr === null ? true : attr === 'true'
                 },
             },
         }
@@ -83,12 +83,12 @@ export default Node.create({
                         ['div', { class: 'w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm' }, author.charAt(0)],
                         ['div', { class: 'flex flex-col' },
                             ['span', { class: 'text-sm font-bold text-gray-900' }, author],
-                            verified ? ['div', { class: 'flex items-center gap-1 text-green-600' },
+                            ...(verified ? [['div', { class: 'flex items-center gap-1 text-green-600' },
                                 ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: '12', height: '12', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
                                     ['polyline', { points: '20 6 9 17 4 12' }]
                                 ],
                                 ['span', { class: 'text-[10px] font-bold uppercase tracking-wider' }, 'Verified Purchase']
-                            ] : null
+                            ]] : [])
                         ]
                     ],
                     // Stars

@@ -27,19 +27,19 @@ export default Node.create({
                 parseHTML: element => {
                     const attr = element.getAttribute('data-features')
                     try {
-                        return attr ? JSON.parse(attr) : null
+                        return attr ? JSON.parse(attr) : undefined
                     } catch {
-                        return null
+                        return undefined
                     }
                 },
             },
             ourBrand: {
                 default: 'Our Formula',
-                parseHTML: element => element.getAttribute('data-our-brand'),
+                parseHTML: element => element.getAttribute('data-our-brand') || undefined,
             },
             theirBrand: {
                 default: 'Generic Brands',
-                parseHTML: element => element.getAttribute('data-their-brand'),
+                parseHTML: element => element.getAttribute('data-their-brand') || undefined,
             },
         }
     },
@@ -55,8 +55,11 @@ export default Node.create({
     renderHTML({ HTMLAttributes, node }) {
         const { features, ourBrand, theirBrand } = node.attrs
 
+        // Safety check
+        const safeFeatures = Array.isArray(features) ? features : []
+
         // Build the table rows
-        const rows = (features as ComparisonFeature[]).map((feature) => {
+        const rows = (safeFeatures as ComparisonFeature[]).map((feature) => {
             const usIcon = feature.us
                 ? ['div', { class: 'w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center' },
                     ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: '20', height: '20', viewBox: '0 0 24 24', fill: 'none', stroke: '#059669', 'stroke-width': '3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
@@ -94,7 +97,7 @@ export default Node.create({
 
         return ['div', mergeAttributes(HTMLAttributes, { 
             'data-type': 'comparison-table', 
-            'data-features': JSON.stringify(features),
+            'data-features': JSON.stringify(safeFeatures),
             'data-our-brand': ourBrand,
             'data-their-brand': theirBrand,
             class: 'my-10' 

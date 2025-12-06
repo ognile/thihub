@@ -34,9 +34,9 @@ export default Node.create({
                 parseHTML: element => {
                     const attr = element.getAttribute('data-items')
                     try {
-                        return attr ? JSON.parse(attr) : null
+                        return attr ? JSON.parse(attr) : undefined
                     } catch {
-                        return null
+                        return undefined
                     }
                 },
             },
@@ -67,7 +67,10 @@ export default Node.create({
             3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
         }
 
-        const itemElements = (items as IconListItem[]).map((item) => {
+        // Safety check
+        const safeItems = Array.isArray(items) ? items : []
+
+        const itemElements = (safeItems as IconListItem[]).map((item) => {
             return ['div', { class: 'group bg-gradient-to-br from-slate-50 to-white p-5 sm:p-6 rounded-xl border border-slate-200' },
                 // Icon Container
                 ['div', { class: 'w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-50 flex items-center justify-center mb-4 text-emerald-600' },
@@ -82,7 +85,7 @@ export default Node.create({
 
         return ['div', mergeAttributes(HTMLAttributes, { 
             'data-type': 'icon-list', 
-            'data-items': JSON.stringify(items),
+            'data-items': JSON.stringify(safeItems),
             'data-columns': columns,
             class: 'my-10' 
         }),
