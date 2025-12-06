@@ -734,7 +734,7 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                         <button onClick={() => editor.chain().focus().insertContent({ type: 'comparisonTable' }).run()} className="p-2 hover:bg-emerald-50 text-emerald-600 text-xs font-medium flex items-center gap-1">
                             <Table2 className="w-3 h-3" />
                             Table
-                        </button>
+                            </button>
                         <button onClick={() => editor.chain().focus().insertContent({ type: 'iconList' }).run()} className="p-2 hover:bg-emerald-50 text-emerald-600 text-xs font-medium flex items-center gap-1">
                             <List className="w-3 h-3" />
                             Icons
@@ -742,7 +742,7 @@ export default function LiveArticleEditor({ article: initialArticle, onSave }: L
                         <button onClick={() => editor.chain().focus().insertContent({ type: 'timeline' }).run()} className="p-2 hover:bg-emerald-50 text-emerald-600 text-xs font-medium flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             Timeline
-                        </button>
+                            </button>
                         <button onClick={() => editor.chain().focus().insertContent({ type: 'imagePlaceholder' }).run()} className="p-2 hover:bg-emerald-50 text-emerald-600 text-xs font-medium flex items-center gap-1">
                             <ImageIcon className="w-3 h-3" />
                             Placeholder

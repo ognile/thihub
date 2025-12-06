@@ -134,7 +134,26 @@ export default function CreateArticlePage() {
         } catch (err: any) {
             stageTimersRef.current.forEach(timer => clearTimeout(timer));
             stageTimersRef.current = [];
-            toast.error(err.message || 'Failed to generate article');
+            
+            // Handle schema error specifically
+            if (err.message && (err.message.includes('PGRST204') || err.message.includes('article_theme'))) {
+                toast.error(
+                    <div className="flex flex-col gap-2">
+                        <span>Database migration required for V2 features.</span>
+                        <a 
+                            href="/api/setup-v2-schema" 
+                            target="_blank" 
+                            className="underline font-bold text-white hover:text-gray-200"
+                        >
+                            Click here to update database
+                        </a>
+                    </div>,
+                    { duration: 10000 }
+                );
+            } else {
+                toast.error(err.message || 'Failed to generate article');
+            }
+            
             setLoading(false);
             setGenerationStage(0);
         }

@@ -7,60 +7,60 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 // V1 Standard Blog Prompt
 const getV1Prompt = (rawText: string) => `
-You are an expert content formatter and HTML structurer.
+            You are an expert content formatter and HTML structurer.
+            
+            YOUR TASK:
+            Take the provided RAW TEXT and format it into a JSON object for a health news site.
+            
+            CRITICAL RULE: ** DO NOT REWRITE THE CONTENT.**
+            -   You must use the EXACT wording from the raw text.
+            - Do NOT summarize, do NOT "optimize", do NOT change the tone.
+            - Your ONLY job is to apply HTML tags and extract the structure.
+            
+            INSTRUCTIONS FOR PARSING:
+        1. ** Headline **: Identify the main headline(usually the first line).Extract it exactly.
+            2. ** Subheadline **: Identify the subheadline(usually the second line).Extract it exactly.
+            3. ** Body Content **:
+                -   Take the rest of the text and format it as clean, semantic HTML.
+                -   **CRITICAL**: Do NOT add any new text, introductory phrases, or concluding remarks.
+                -   **CRITICAL**: Do NOT invent new headlines or subheadlines if they are not in the source text.
+                -   If a line looks like a subheadline (short, bold, or separate line), use <h2> or <h3>.
+                -   Use <blockquote> for testimonials, key quotes, or "callout" boxes.
+                -   Use <ul> or <ol> for lists.
+                -   Use <strong> and <em> for emphasis.
+                -   ** DO NOT ** include the title or subtitle in the "content" field.
+                -   ** DO NOT CHANGE A SINGLE WORD OF THE BODY TEXT.**
+            4. ** Key Takeaways **: Extract 3 distinct, punchy "Key Takeaways" from the text. (You may summarize here, but keep it close to the text).
+            5. ** Comments **: Generate 4 - 7 realistic comments from women(ages 35 - 65) discussing the topic / product.They should sound natural, not like bots.
 
-YOUR TASK:
-Take the provided RAW TEXT and format it into a JSON object for a health news site.
-
-CRITICAL RULE: ** DO NOT REWRITE THE CONTENT.**
--   You must use the EXACT wording from the raw text.
-- Do NOT summarize, do NOT "optimize", do NOT change the tone.
-- Your ONLY job is to apply HTML tags and extract the structure.
-
-INSTRUCTIONS FOR PARSING:
-1. ** Headline **: Identify the main headline(usually the first line).Extract it exactly.
-2. ** Subheadline **: Identify the subheadline(usually the second line).Extract it exactly.
-3. ** Body Content **:
-    -   Take the rest of the text and format it as clean, semantic HTML.
-    -   **CRITICAL**: Do NOT add any new text, introductory phrases, or concluding remarks.
-    -   **CRITICAL**: Do NOT invent new headlines or subheadlines if they are not in the source text.
-    -   If a line looks like a subheadline (short, bold, or separate line), use <h2> or <h3>.
-    -   Use <blockquote> for testimonials, key quotes, or "callout" boxes.
-    -   Use <ul> or <ol> for lists.
-    -   Use <strong> and <em> for emphasis.
-    -   ** DO NOT ** include the title or subtitle in the "content" field.
-    -   ** DO NOT CHANGE A SINGLE WORD OF THE BODY TEXT.**
-4. ** Key Takeaways **: Extract 3 distinct, punchy "Key Takeaways" from the text. (You may summarize here, but keep it close to the text).
-5. ** Comments **: Generate 4 - 7 realistic comments from women(ages 35 - 65) discussing the topic / product.They should sound natural, not like bots.
-
-OUTPUT JSON SCHEMA:
-{
-    "title": "The Main Headline (Exact Match)",
-    "subtitle": "The Subheadline (Exact Match)",
-    "author": "Female Name (e.g. Sarah Jenkins)",
-    "reviewer": "Medical Doctor Name (e.g. Dr. A. Peterson, MD)",
-    "date": "Updated: 2 hours ago",
-    "content": "<p>First paragraph...</p>...",
-    "keyTakeaways": [
-        { "title": "Short Title", "content": "One sentence summary" }
-    ],
-    "comments": [
+            OUTPUT JSON SCHEMA:
         {
-            "id": "c1",
-            "author": "Name",
-            "avatar": "https://picsum.photos/seed/c1/100",
-            "content": "Comment text",
-            "time": "2h",
-            "likes": 45,
-            "hasReplies": false,
-            "isLiked": true
+            "title": "The Main Headline (Exact Match)",
+            "subtitle": "The Subheadline (Exact Match)",
+            "author": "Female Name (e.g. Sarah Jenkins)",
+            "reviewer": "Medical Doctor Name (e.g. Dr. A. Peterson, MD)",
+            "date": "Updated: 2 hours ago",
+            "content": "<p>First paragraph...</p>...",
+            "keyTakeaways": [
+                { "title": "Short Title", "content": "One sentence summary" }
+            ],
+            "comments": [
+                {
+                    "id": "c1",
+                    "author": "Name",
+                    "avatar": "https://picsum.photos/seed/c1/100",
+                    "content": "Comment text",
+                    "time": "2h",
+                    "likes": 45,
+                    "hasReplies": false,
+                    "isLiked": true
+                }
+            ]
         }
-    ]
-}
 
-RAW TEXT:
-${rawText}
-`;
+            RAW TEXT:
+            ${rawText}
+        `;
 
 // V2 Scientific Advertorial Prompt - Outputs structured JSON for rich components
 const getV2Prompt = (rawText: string) => `
