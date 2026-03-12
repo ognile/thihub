@@ -1,0 +1,585 @@
+{
+  "schemaVersion": "quiz-funnel.v1",
+  "slug": "symptom-profile",
+  "name": "the hidden pattern symptom profile",
+  "description": "an editorial-style symptom profile that validates the visitor, reveals a likely pattern, gives useful education, captures a lead, and routes to the final product offer.",
+  "estimatedMinutes": 4,
+  "theme": {
+    "shell": "editorial-radiance",
+    "displayFont": "var(--font-serif)",
+    "bodyFont": "var(--font-sans)",
+    "canvasColor": "#f8f1ea",
+    "panelColor": "#fffaf5",
+    "inkColor": "#221813",
+    "accentColor": "#b34f2d",
+    "accentSoftColor": "#f5d7c8",
+    "edgeColor": "#dfc1b2",
+    "successColor": "#2e6c56"
+  },
+  "entrypoints": [
+    {
+      "id": "homepage-hero",
+      "label": "homepage hero",
+      "source": "homepage-hero",
+      "pathHint": "/"
+    },
+    {
+      "id": "article-cta",
+      "label": "article cta",
+      "source": "article-inline-cta",
+      "pathHint": "/articles/[slug]"
+    },
+    {
+      "id": "direct",
+      "label": "direct quiz visit",
+      "source": "direct",
+      "pathHint": "/quiz/symptom-profile"
+    }
+  ],
+  "results": [
+    {
+      "id": "stress-drift",
+      "label": "stress drift",
+      "badge": "nervous system heavy",
+      "affirmation": "your body does not look random. it looks overloaded, wired, and forced to keep compensating.",
+      "headline": "your pattern leans toward stress drift",
+      "summary": "the strongest signal in your answers is a body running hot for too long. sleep gets lighter, patience shortens, cravings spike, and small things start feeling weirdly expensive.",
+      "mechanism": "when stress chemistry stays elevated, it can distort appetite, recovery, sleep quality, and how stable you feel from morning to night. that often feels personal when it is really a pattern.",
+      "educationBullets": [
+        "stress-heavy patterns often show up as light sleep, afternoon crashes, and a shorter fuse.",
+        "the feeling of being puffy, inflamed, or reactive can rise when recovery never fully catches up.",
+        "the fix is rarely one magic move. it is usually calming the input and supporting steadier regulation."
+      ],
+      "dopamineCandies": [
+        "your body is asking for less chaos, not more discipline.",
+        "validation matters because shame makes pattern recognition worse.",
+        "small regulation wins compound faster than heroic resets."
+      ],
+      "offerBridge": "that is why the next step should feel supportive, not punishing: something simple enough to actually stick when your system is already carrying too much."
+    },
+    {
+      "id": "hormone-friction",
+      "label": "hormone friction",
+      "badge": "cycle and mood heavy",
+      "affirmation": "the pattern in your answers suggests your body is not broken. it may be dealing with more friction than support.",
+      "headline": "your pattern leans toward hormone friction",
+      "summary": "the strongest signal in your answers is inconsistency: mood swings, disrupted sleep, bloating, cravings, and feeling unlike yourself without a clean explanation.",
+      "mechanism": "when hormone-related signals start feeling less stable, the body can swing between high and low energy, weird hunger cues, poor sleep, and emotional volatility. people often interpret that as failure instead of feedback.",
+      "educationBullets": [
+        "hormone friction can feel subtle at first: lighter sleep, more irritation, and a body that feels harder to read.",
+        "bloating and cravings often travel with the same pattern rather than being isolated problems.",
+        "consistency beats intensity when the goal is smoother daily regulation."
+      ],
+      "dopamineCandies": [
+        "your symptoms make sense together, not separately.",
+        "a body that feels different is not automatically a body in decline.",
+        "support works best when it fits the rhythm you already live in."
+      ],
+      "offerBridge": "if the goal is to feel more steady without turning your life into a full-time protocol, the right support has to be simple, predictable, and easy to repeat."
+    },
+    {
+      "id": "recovery-debt",
+      "label": "recovery debt",
+      "badge": "energy and capacity heavy",
+      "affirmation": "your answers point to a body that has been spending more than it is restoring.",
+      "headline": "your pattern leans toward recovery debt",
+      "summary": "the strongest signal here is depletion: dragging into the day, brain fog, feeling less resilient, and noticing that your body takes longer to bounce back than it used to.",
+      "mechanism": "recovery debt builds when sleep quality, nutritional steadiness, and daily stress stop paying you back fast enough. the result is not laziness. it is lower reserve.",
+      "educationBullets": [
+        "recovery debt often looks like low motivation when the real issue is low reserve.",
+        "brain fog and low patience frequently arrive before people name the pattern as depletion.",
+        "support that lowers friction can help more than another ambitious restart."
+      ],
+      "dopamineCandies": [
+        "capacity is trainable again when the baseline stops slipping.",
+        "the goal is not perfection. it is easier recovery and steadier reserve.",
+        "you do not need a harder routine. you need a more believable one."
+      ],
+      "offerBridge": "the strongest next move is usually a low-friction support layer that helps your body feel easier to manage before you ask more from it."
+    }
+  ],
+  "steps": [
+    {
+      "id": "welcome",
+      "kind": "welcome",
+      "kicker": "quick editorial profile",
+      "title": "your body may be telling one story through many tiny symptoms.",
+      "body": "this takes about four minutes. no lab work. no generic score. just a tighter read on the pattern your answers point to and what to do next.",
+      "primaryLabel": "start my profile",
+      "secondaryLabel": "built to feel personal, not clinical",
+      "trustPoints": [
+        "minimum 13-step flow",
+        "personalized result pattern",
+        "practical next-step guidance"
+      ],
+      "next": "age-window"
+    },
+    {
+      "id": "age-window",
+      "kind": "question",
+      "kicker": "step 1",
+      "title": "which age window feels closest right now?",
+      "body": "not because age defines you. it just changes which patterns become more likely.",
+      "selection": "single",
+      "options": [
+        {
+          "id": "late-20s",
+          "label": "late 20s to early 30s",
+          "description": "still busy, still resilient, but not untouchable anymore",
+          "resultWeights": {
+            "stress-drift": 2,
+            "hormone-friction": 1,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "mid-30s",
+          "label": "mid 30s to early 40s",
+          "description": "a lot to carry, less interest in pretending everything feels easy",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 2,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "mid-40s-plus",
+          "label": "mid 40s and up",
+          "description": "more pattern awareness, less tolerance for feeling off",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 3,
+            "recovery-debt": 2
+          }
+        }
+      ],
+      "next": "sleep-check"
+    },
+    {
+      "id": "sleep-check",
+      "kind": "question",
+      "kicker": "step 2",
+      "title": "which sleep line sounds most familiar?",
+      "body": "sleep is usually where hidden drift starts flashing first.",
+      "selection": "single",
+      "options": [
+        {
+          "id": "cant-wind-down",
+          "label": "i am tired, but my body does not fully power down",
+          "description": "wired but tired",
+          "resultWeights": {
+            "stress-drift": 3,
+            "hormone-friction": 1,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "wake-up-hot",
+          "label": "i wake up too early or too warm and never quite settle back in",
+          "description": "fragmented and unpredictable",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 3,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "sleep-but-flat",
+          "label": "i sleep, but i still wake up flat",
+          "description": "hours are happening, recovery is not",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 1,
+            "recovery-debt": 3
+          }
+        }
+      ],
+      "next": "validation-one"
+    },
+    {
+      "id": "validation-one",
+      "kind": "insight",
+      "kicker": "what this often means",
+      "title": "the first useful clue is simple: scattered symptoms usually travel in groups for a reason.",
+      "body": "people blame themselves when the better move is pattern recognition. that is why this profile is mapping clusters instead of isolated complaints.",
+      "primaryLabel": "keep going",
+      "bullets": [
+        "sleep, cravings, mood, and energy often move together.",
+        "one strong symptom can hide the pattern underneath.",
+        "validation is useful because it clears the noise."
+      ],
+      "quoteText": "what felt random started making sense the second i stopped looking at each symptom alone.",
+      "quoteAttribution": "common reader feedback",
+      "next": "mood-check"
+    },
+    {
+      "id": "mood-check",
+      "kind": "question",
+      "kicker": "step 4",
+      "title": "how has your mood felt lately?",
+      "selection": "single",
+      "options": [
+        {
+          "id": "short-fuse",
+          "label": "short fuse, overstimulated, patience runs out fast",
+          "resultWeights": {
+            "stress-drift": 3,
+            "hormone-friction": 2,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "up-down",
+          "label": "more up and down than usual, and harder to predict",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 3,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "flat",
+          "label": "less emotional range, more flat and drained",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 1,
+            "recovery-debt": 3
+          }
+        }
+      ],
+      "next": "bloat-check"
+    },
+    {
+      "id": "bloat-check",
+      "kind": "question",
+      "kicker": "step 5",
+      "title": "what happens around digestion, puffiness, or cravings?",
+      "selection": "single",
+      "options": [
+        {
+          "id": "stress-snacking",
+          "label": "my hunger cues get weird when stress goes up",
+          "resultWeights": {
+            "stress-drift": 3,
+            "hormone-friction": 1,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "cyclical-bloat",
+          "label": "bloating and cravings feel cyclical or hormonally timed",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 3,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "everything-feels-heavy",
+          "label": "i feel heavy, dull, and slower to recover after normal days",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 1,
+            "recovery-debt": 3
+          }
+        }
+      ],
+      "next": "focus-check"
+    },
+    {
+      "id": "focus-check",
+      "kind": "question",
+      "kicker": "step 6",
+      "title": "what does your brain feel like by the middle of the day?",
+      "selection": "single",
+      "options": [
+        {
+          "id": "spinning-tabs",
+          "label": "too many mental tabs open, hard to settle into one thing",
+          "resultWeights": {
+            "stress-drift": 3,
+            "hormone-friction": 1,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "foggy-switches",
+          "label": "clear one moment, foggy the next, almost like a switch",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 3,
+            "recovery-debt": 2
+          }
+        },
+        {
+          "id": "steady-fog",
+          "label": "just low wattage most days",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 1,
+            "recovery-debt": 3
+          }
+        }
+      ],
+      "next": "validation-two"
+    },
+    {
+      "id": "validation-two",
+      "kind": "insight",
+      "kicker": "dopamine candy",
+      "title": "if this already feels familiar, that is a signal in itself.",
+      "body": "customization is not magic. it is pattern density. once a few answers line up, the body usually starts looking more legible.",
+      "primaryLabel": "show me the rest",
+      "bullets": [
+        "the body leaks information early if you know where to look.",
+        "energy and mood often shift before people name the pattern.",
+        "the point is not fear. the point is clarity."
+      ],
+      "next": "stress-load"
+    },
+    {
+      "id": "stress-load",
+      "kind": "question",
+      "kicker": "step 8",
+      "title": "how loaded does life feel right now?",
+      "selection": "single",
+      "options": [
+        {
+          "id": "high-pressure",
+          "label": "very. i feel like i am managing too many inputs at once",
+          "resultWeights": {
+            "stress-drift": 3,
+            "hormone-friction": 1,
+            "recovery-debt": 2
+          }
+        },
+        {
+          "id": "variable-pressure",
+          "label": "it comes in waves, and those waves hit me harder than they used to",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 3,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "normal-but-exhausted",
+          "label": "nothing dramatic. i just feel lower capacity than i should",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 1,
+            "recovery-debt": 3
+          }
+        }
+      ],
+      "next": "body-signal"
+    },
+    {
+      "id": "body-signal",
+      "kind": "question",
+      "kicker": "step 9",
+      "title": "which physical signal bothers you most lately?",
+      "selection": "single",
+      "options": [
+        {
+          "id": "tight-and-alert",
+          "label": "tight jaw, tense shoulders, always a little on edge",
+          "resultWeights": {
+            "stress-drift": 3,
+            "hormone-friction": 1,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "puffy-and-off",
+          "label": "puffy, bloated, more inflamed than normal",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 3,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "heavy-and-slow",
+          "label": "heavy limbs, low recovery, low spark",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 1,
+            "recovery-debt": 3
+          }
+        }
+      ],
+      "next": "confidence-check"
+    },
+    {
+      "id": "confidence-check",
+      "kind": "question",
+      "kicker": "step 10",
+      "title": "what part of this has started to get under your skin?",
+      "selection": "single",
+      "options": [
+        {
+          "id": "reactive-version",
+          "label": "i do not like how reactive i feel",
+          "resultWeights": {
+            "stress-drift": 3,
+            "hormone-friction": 2,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "unpredictable-version",
+          "label": "i do not like how unpredictable i feel",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 3,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "diminished-version",
+          "label": "i do not like how reduced i feel",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 1,
+            "recovery-debt": 3
+          }
+        }
+      ],
+      "next": "habit-check"
+    },
+    {
+      "id": "habit-check",
+      "kind": "question",
+      "kicker": "step 11",
+      "title": "what have you already tried?",
+      "selection": "multiple",
+      "continueLabel": "continue",
+      "options": [
+        {
+          "id": "cleaner-routine",
+          "label": "cleaner eating or tighter routines",
+          "description": "more discipline, not always more relief",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 1,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "sleep-hacks",
+          "label": "sleep hacks, magnesium, random night fixes",
+          "description": "helpful sometimes, but not enough",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 2,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "pushing-through",
+          "label": "mostly just pushing through it",
+          "description": "functioning but not exactly supported",
+          "resultWeights": {
+            "stress-drift": 2,
+            "hormone-friction": 1,
+            "recovery-debt": 2
+          }
+        }
+      ],
+      "next": "readiness-check"
+    },
+    {
+      "id": "readiness-check",
+      "kind": "question",
+      "kicker": "step 12",
+      "title": "if the next step felt simple and believable, how ready are you to act on it?",
+      "selection": "single",
+      "options": [
+        {
+          "id": "ready-now",
+          "label": "very. i want something clear and realistic",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 1,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "need-proof",
+          "label": "interested, but i need it to make sense first",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 1,
+            "recovery-debt": 1
+          }
+        },
+        {
+          "id": "curious-only",
+          "label": "mostly curious right now",
+          "resultWeights": {
+            "stress-drift": 1,
+            "hormone-friction": 1,
+            "recovery-debt": 1
+          }
+        }
+      ],
+      "next": "pattern-result"
+    },
+    {
+      "id": "pattern-result",
+      "kind": "result",
+      "kicker": "your profile read",
+      "title": "your strongest pattern is ready.",
+      "body": "this is not a diagnosis. it is a pattern read based on the signals you just confirmed.",
+      "primaryLabel": "show the next layer",
+      "secondaryLabel": "i want the recommendation",
+      "disclaimer": "educational only. use this as pattern guidance, not medical advice.",
+      "next": "lead-gate"
+    },
+    {
+      "id": "lead-gate",
+      "kind": "lead",
+      "kicker": "send the personalized recap",
+      "title": "want the personalized recap and action path in your inbox?",
+      "body": "we will send your pattern summary, the key mechanism that matched your answers, and the exact recommendation path from this profile.",
+      "submitLabel": "send my recap",
+      "consentLabel": "yes, send my recap and relevant follow-up notes",
+      "disclaimer": "you can unsubscribe any time. this is for educational content and product follow-up tied to this profile.",
+      "requireConsent": true,
+      "fields": [
+        {
+          "id": "first-name",
+          "label": "first name",
+          "type": "text",
+          "placeholder": "your first name",
+          "required": true
+        },
+        {
+          "id": "email",
+          "label": "email",
+          "type": "email",
+          "placeholder": "you@example.com",
+          "required": true
+        }
+      ],
+      "next": "offer"
+    },
+    {
+      "id": "offer",
+      "kind": "offer",
+      "kicker": "best next step",
+      "title": "the lowest-friction next move is support you will actually take.",
+      "body": "the point is not another heroic reset. it is making your baseline easier to manage with support that fits a real life.",
+      "ctaLabel": "see the feminine balance gummies",
+      "ctaUrl": "https://mynuora.com/products/feminine-balance-gummies-1",
+      "note": "final routing from the profile",
+      "guarantee": "60-day money-back guarantee",
+      "bullets": [
+        "simple enough to keep using when life is already full",
+        "built to support steadier daily regulation",
+        "aligned with the pattern this profile surfaced"
+      ]
+    }
+  ]
+}

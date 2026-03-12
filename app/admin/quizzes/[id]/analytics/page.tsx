@@ -1,389 +1,470 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, use } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
-    ArrowLeft,
-    Users,
-    CheckCircle,
-    Clock,
-    TrendingDown,
-    Download,
-    RefreshCw,
-    ChevronRight,
-    BarChart3,
-    Eye,
-} from 'lucide-react';
+import Link from "next/link";
+import { use, useEffect, useMemo, useState, type ReactNode } from "react";
+import { ArrowLeft, BarChart3, Download, ExternalLink, RefreshCw, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
-interface Quiz {
+interface QuizAnalyticsPayload {
+  quiz: {
     id: string;
-    name: string;
     slug: string;
-    slides: { id: string; type: string; content: { headline?: string } }[];
-}
-
-interface Response {
+    name: string;
+    status: "draft" | "published" | "archived";
+    publishedAt: string | null;
+    definition: {
+      steps: Array<{
+        id: string;
+        kind: string;
+        title: string;
+      }>;
+    };
+  };
+  summary: {
+    sessions: number;
+    completedSessions: number;
+    completionRate: number;
+    leadCaptures: number;
+    leadCaptureRate: number;
+    offerViews: number;
+    offerClicks: number;
+    ctaCtr: number;
+  };
+  sources: Array<{
+    source: string;
+    sessions: number;
+    completedSessions: number;
+    leadCaptures: number;
+    completionRate: number;
+    leadCaptureRate: number;
+  }>;
+  funnel: Array<{
+    stepId: string;
+    title: string;
+    kind: string;
+    reachedSessions: number;
+    reachRate: number;
+    dropOffCount: number;
+    dropOffRate: number;
+  }>;
+  results: Array<{
+    resultId: string;
+    label: string;
+    sessions: number;
+  }>;
+  recentSessions: Array<{
     id: string;
-    session_id: string;
-    answers: { slideId: string; selectedOptions: string[]; timestamp: number }[];
-    current_slide: number;
-    started_at: string;
-    completed_at: string | null;
-    user_agent: string | null;
+    sessionToken: string;
+    entrySource: string | null;
+    articleSlug: string | null;
+    resultId: string | null;
+    status: "active" | "completed";
+    leadCapturedAt: string | null;
+    offerClickedAt: string | null;
+    completedAt: string | null;
+    createdAt: string;
+    answers: Array<{
+      stepId: string;
+      optionIds: string[];
+      answeredAt: string;
+    }>;
+  }>;
 }
 
-export default function QuizAnalytics({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params);
-    const router = useRouter();
-    const [quiz, setQuiz] = useState<Quiz | null>(null);
-    const [responses, setResponses] = useState<Response[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isRefreshing, setIsRefreshing] = useState(false);
+export default function QuizAnalyticsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const [payload, setPayload] = useState<QuizAnalyticsPayload | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        fetchData();
-    }, [id]);
+  useEffect(() => {
+    let cancelled = false;
 
-    const fetchData = async () => {
-        try {
-            const [quizRes, responsesRes] = await Promise.all([
-                fetch(`/api/quizzes/${id}`),
-                fetch(`/api/quizzes/${id}/responses`),
-            ]);
-
-            if (quizRes.ok) {
-                const quizData = await quizRes.json();
-                setQuiz(quizData);
-            }
-
-            if (responsesRes.ok) {
-                const responsesData = await responsesRes.json();
-                setResponses(responsesData);
-            }
-        } catch (e) {
-            toast.error('Failed to load analytics');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleRefresh = async () => {
+    async function load(nextState: "initial" | "refresh") {
+      if (nextState === "refresh") {
         setIsRefreshing(true);
-        await fetchData();
-        setIsRefreshing(false);
-    };
+      }
 
-    const handleExportCSV = () => {
-        if (!quiz || responses.length === 0) return;
+      try {
+        const response = await fetch(`/api/quizzes/${id}/analytics`, { cache: "no-store" });
+        const nextPayload = (await response.json()) as QuizAnalyticsPayload | { error?: string };
+        if (!response.ok) {
+          throw new Error("error" in nextPayload ? nextPayload.error ?? "failed to load analytics" : "failed to load analytics");
+        }
 
-        // Build CSV header
-        const headers = ['Session ID', 'Started At', 'Completed At', 'Status'];
-        quiz.slides.forEach((slide, i) => {
-            headers.push(`Slide ${i + 1}: ${slide.content.headline || slide.type}`);
-        });
-
-        // Build CSV rows
-        const rows = responses.map(response => {
-            const row = [
-                response.session_id,
-                new Date(response.started_at).toLocaleString(),
-                response.completed_at ? new Date(response.completed_at).toLocaleString() : 'Not completed',
-                response.completed_at ? 'Completed' : 'In Progress',
-            ];
-
-            quiz.slides.forEach(slide => {
-                const answer = response.answers.find(a => a.slideId === slide.id);
-                row.push(answer ? answer.selectedOptions.join(', ') : '-');
-            });
-
-            return row;
-        });
-
-        // Convert to CSV
-        const csvContent = [
-            headers.join(','),
-            ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
-        ].join('\n');
-
-        // Download
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${quiz.slug}-responses-${Date.now()}.csv`;
-        a.click();
-        window.URL.revokeObjectURL(url);
-    };
-
-    // Calculate stats
-    const totalResponses = responses.length;
-    const completedResponses = responses.filter(r => r.completed_at).length;
-    const completionRate = totalResponses > 0 ? Math.round((completedResponses / totalResponses) * 100) : 0;
-    const avgTimeToComplete = completedResponses > 0
-        ? Math.round(
-            responses
-                .filter(r => r.completed_at)
-                .reduce((sum, r) => {
-                    const start = new Date(r.started_at).getTime();
-                    const end = new Date(r.completed_at!).getTime();
-                    return sum + (end - start);
-                }, 0) / completedResponses / 1000 / 60
-        )
-        : 0;
-
-    // Calculate funnel data
-    const funnelData = quiz?.slides.map((slide, index) => {
-        const reachedCount = responses.filter(r => 
-            r.answers.some(a => a.slideId === slide.id) || r.current_slide >= index
-        ).length;
-        const dropOffCount = index === 0 
-            ? totalResponses - reachedCount
-            : (quiz?.slides[index - 1] 
-                ? responses.filter(r => r.answers.some(a => a.slideId === quiz.slides[index - 1].id)).length 
-                : totalResponses) - reachedCount;
-        const dropOffRate = totalResponses > 0 ? Math.round((dropOffCount / totalResponses) * 100) : 0;
-        
-        return {
-            slide,
-            slideIndex: index,
-            reached: reachedCount,
-            dropOff: dropOffCount,
-            dropOffRate,
-            percentage: totalResponses > 0 ? Math.round((reachedCount / totalResponses) * 100) : 0,
-        };
-    }) || [];
-
-    if (isLoading) {
-        return (
-            <div className="space-y-6">
-                <Skeleton className="h-8 w-48" />
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    {[1, 2, 3, 4].map(i => (
-                        <Skeleton key={i} className="h-32" />
-                    ))}
-                </div>
-                <Skeleton className="h-96" />
-            </div>
-        );
+        if (!cancelled) {
+          setPayload(nextPayload as QuizAnalyticsPayload);
+          setError(null);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : "failed to load analytics");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
+      }
     }
 
-    if (!quiz) {
-        return (
-            <div className="text-center py-12">
-                <p className="text-muted-foreground">Quiz not found</p>
-                <Button asChild className="mt-4">
-                    <Link href="/admin/quizzes">Back to Quizzes</Link>
-                </Button>
-            </div>
-        );
+    void load("initial");
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const topDropOff = useMemo(() => {
+    if (!payload) {
+      return null;
     }
 
+    return [...payload.funnel].sort((left, right) => right.dropOffCount - left.dropOffCount)[0] ?? null;
+  }, [payload]);
+
+  const exportReport = () => {
+    if (!payload) {
+      return;
+    }
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${payload.quiz.slug}-analytics-${Date.now()}.json`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const refresh = async () => {
+    setIsRefreshing(true);
+
+    try {
+      const response = await fetch(`/api/quizzes/${id}/analytics`, { cache: "no-store" });
+      const nextPayload = (await response.json()) as QuizAnalyticsPayload | { error?: string };
+      if (!response.ok) {
+        throw new Error("error" in nextPayload ? nextPayload.error ?? "failed to load analytics" : "failed to load analytics");
+      }
+
+      setPayload(nextPayload as QuizAnalyticsPayload);
+      setError(null);
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : "failed to load analytics");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  if (isLoading) {
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                    <Link href={`/admin/quizzes/${id}`} className="text-muted-foreground hover:text-foreground">
-                        <ArrowLeft className="h-5 w-5" />
-                    </Link>
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight">{quiz.name}</h1>
-                        <p className="text-muted-foreground">Analytics & Responses</p>
-                    </div>
-                </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
-                        <RefreshCw className={cn("h-4 w-4 mr-2", isRefreshing && "animate-spin")} />
-                        Refresh
-                    </Button>
-                    <Button variant="outline" onClick={handleExportCSV} disabled={responses.length === 0}>
-                        <Download className="h-4 w-4 mr-2" />
-                        Export CSV
-                    </Button>
-                </div>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Total Responses</CardTitle>
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{totalResponses}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Completed</CardTitle>
-                        <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{completedResponses}</div>
-                        <p className="text-xs text-muted-foreground">{completionRate}% completion rate</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Avg. Time</CardTitle>
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{avgTimeToComplete}m</div>
-                        <p className="text-xs text-muted-foreground">to complete</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Drop-off Rate</CardTitle>
-                        <TrendingDown className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{100 - completionRate}%</div>
-                        <p className="text-xs text-muted-foreground">did not complete</p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Funnel Visualization */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <BarChart3 className="h-5 w-5" />
-                        Funnel Analysis
-                    </CardTitle>
-                    <CardDescription>See where users drop off in your quiz</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {funnelData.length === 0 ? (
-                        <p className="text-center text-muted-foreground py-8">No data yet</p>
-                    ) : (
-                        <div className="space-y-4">
-                            {funnelData.map((item, index) => (
-                                <div key={item.slide.id} className="space-y-2">
-                                    <div className="flex items-center justify-between text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-muted-foreground w-6">{index + 1}.</span>
-                                            <span className="font-medium truncate max-w-[300px]">
-                                                {item.slide.content.headline || item.slide.type}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <span className="text-muted-foreground">
-                                                {item.reached} reached
-                                            </span>
-                                            {item.dropOff > 0 && (
-                                                <Badge variant="outline" className="text-red-600 border-red-200">
-                                                    -{item.dropOff} ({item.dropOffRate}%)
-                                                </Badge>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="relative h-8 bg-muted rounded-lg overflow-hidden">
-                                        <div
-                                            className="absolute inset-y-0 left-0 bg-primary/80 rounded-lg transition-all duration-500"
-                                            style={{ width: `${item.percentage}%` }}
-                                        />
-                                        <div className="absolute inset-0 flex items-center justify-center text-sm font-medium">
-                                            {item.percentage}%
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Recent Responses */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Eye className="h-5 w-5" />
-                        Recent Responses
-                    </CardTitle>
-                    <CardDescription>Individual response details</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {responses.length === 0 ? (
-                        <p className="text-center text-muted-foreground py-8">No responses yet</p>
-                    ) : (
-                        <div className="rounded-md border">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Session</TableHead>
-                                        <TableHead>Started</TableHead>
-                                        <TableHead>Progress</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {responses.slice(0, 20).map((response) => {
-                                        const progress = Math.round(
-                                            (response.answers.length / quiz.slides.length) * 100
-                                        );
-                                        return (
-                                            <TableRow key={response.id}>
-                                                <TableCell className="font-mono text-xs">
-                                                    {response.session_id.slice(0, 12)}...
-                                                </TableCell>
-                                                <TableCell>
-                                                    {new Date(response.started_at).toLocaleDateString()}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-                                                            <div
-                                                                className="h-full bg-primary rounded-full"
-                                                                style={{ width: `${progress}%` }}
-                                                            />
-                                                        </div>
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {progress}%
-                                                        </span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant={response.completed_at ? 'default' : 'secondary'}>
-                                                        {response.completed_at ? 'Completed' : 'In Progress'}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <Button variant="ghost" size="sm">
-                                                        View
-                                                        <ChevronRight className="h-4 w-4 ml-1" />
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-72" />
+        <div className="grid gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-32 rounded-[1.6rem]" />
+          ))}
         </div>
+        <Skeleton className="h-[460px] rounded-[1.8rem]" />
+      </div>
     );
+  }
+
+  if (!payload) {
+    return (
+      <Card className="rounded-[1.8rem] border-destructive/30">
+        <CardHeader>
+          <CardTitle>analytics unavailable</CardTitle>
+          <CardDescription>{error ?? "no analytics payload returned"}</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-2">
+          <Link
+            href={`/admin/quizzes/${payload.quiz.id}`}
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            back to editor
+          </Link>
+          <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">analytics</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-black tracking-tight">{payload.quiz.name}</h1>
+            <div className="rounded-full border border-border bg-muted/40 px-3 py-1 text-xs uppercase tracking-[0.24em] text-muted-foreground">
+              /{payload.quiz.slug}
+            </div>
+          </div>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            step reach, drop-off, result distribution, lead capture, cta click-through, and source attribution.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Button variant="outline" onClick={refresh} disabled={isRefreshing}>
+            <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing && "animate-spin")} />
+            refresh
+          </Button>
+          <Button variant="outline" onClick={exportReport}>
+            <Download className="mr-2 h-4 w-4" />
+            export json
+          </Button>
+          {payload.quiz.status === "published" ? (
+            <Button asChild>
+              <Link href={`/quiz/${payload.quiz.slug}`} target="_blank">
+                open live funnel
+                <ExternalLink className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {error ? (
+        <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          title="sessions"
+          value={String(payload.summary.sessions)}
+          detail={`${payload.summary.completedSessions} completed`}
+        />
+        <MetricCard
+          title="completion"
+          value={`${payload.summary.completionRate}%`}
+          detail={`${payload.summary.completedSessions}/${payload.summary.sessions || 0} reached the end`}
+        />
+        <MetricCard
+          title="lead capture"
+          value={`${payload.summary.leadCaptureRate}%`}
+          detail={`${payload.summary.leadCaptures} captured`}
+        />
+        <MetricCard
+          title="cta ctr"
+          value={`${payload.summary.ctaCtr}%`}
+          detail={`${payload.summary.offerClicks}/${payload.summary.offerViews} offer viewers clicked`}
+        />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_420px]">
+        <Card className="rounded-[1.8rem]">
+          <CardHeader>
+            <CardTitle>funnel reach</CardTitle>
+            <CardDescription>exact step reach and step-to-step drop-off from the event stream.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {payload.funnel.map((step, index) => (
+              <div key={step.stepId} className="rounded-[1.4rem] border border-border/70 bg-muted/20 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
+                      step {index + 1} · {step.kind}
+                    </p>
+                    <p className="mt-2 text-lg font-black leading-tight">{step.title}</p>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-background px-3 py-2 text-right">
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">reach</p>
+                    <p className="text-xl font-black">{step.reachedSessions}</p>
+                    <p className="text-xs text-muted-foreground">{step.reachRate}%</p>
+                  </div>
+                </div>
+                <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${step.reachRate}%` }} />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                  <span>drop-off {step.dropOffCount}</span>
+                  <span>{step.dropOffRate}% of sessions</span>
+                  <span>{step.stepId}</span>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <div className="space-y-4">
+          <Card className="rounded-[1.8rem]">
+            <CardHeader>
+              <CardTitle>where the drag appears</CardTitle>
+              <CardDescription>highest observed drop-off point in the live funnel.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {topDropOff ? (
+                <div className="rounded-[1.4rem] border border-border/70 bg-muted/20 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{topDropOff.kind}</p>
+                  <p className="mt-2 text-xl font-black leading-tight">{topDropOff.title}</p>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                    {topDropOff.dropOffCount} sessions dropped before the next step. that is {topDropOff.dropOffRate}% of all sessions.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">no funnel data yet.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[1.8rem]">
+            <CardHeader>
+              <CardTitle>result distribution</CardTitle>
+              <CardDescription>which result profile is winning most often.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {payload.results.map((result) => {
+                const reachRate = payload.summary.sessions === 0
+                  ? 0
+                  : Math.round((result.sessions / payload.summary.sessions) * 100);
+                return (
+                  <div key={result.resultId} className="rounded-[1.3rem] border border-border/70 bg-muted/20 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-black">{result.label}</p>
+                        <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">{result.resultId}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-black">{result.sessions}</p>
+                        <p className="text-xs text-muted-foreground">{reachRate}%</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[1.8rem]">
+            <CardHeader>
+              <CardTitle>entry sources</CardTitle>
+              <CardDescription>source-tagged sessions across home, article, and direct entry.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {payload.sources.length > 0 ? payload.sources.map((source) => (
+                <div key={source.source} className="rounded-[1.3rem] border border-border/70 bg-muted/20 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black">{source.source.replace(/-/g, " ")}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {source.completedSessions} completed · {source.leadCaptures} leads
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-black">{source.sessions}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {source.completionRate}% complete · {source.leadCaptureRate}% lead
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )) : (
+                <p className="text-sm text-muted-foreground">no source data yet.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <Card className="rounded-[1.8rem]">
+        <CardHeader>
+          <CardTitle>recent sessions</CardTitle>
+          <CardDescription>raw recent sessions for debugging analytics against actual event-driven state.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {payload.recentSessions.length > 0 ? payload.recentSessions.map((session) => (
+            <div key={session.id} className="rounded-[1.4rem] border border-border/70 bg-muted/20 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <SessionPill>{session.status}</SessionPill>
+                    <SessionPill>{session.entrySource ?? "unknown"}</SessionPill>
+                    {session.articleSlug ? <SessionPill>article:{session.articleSlug}</SessionPill> : null}
+                    {session.resultId ? <SessionPill>result:{session.resultId}</SessionPill> : null}
+                  </div>
+                  <p className="font-mono text-xs text-muted-foreground">{session.sessionToken}</p>
+                  <p className="text-sm text-muted-foreground">
+                    started {formatDateTime(session.createdAt)}
+                    {session.completedAt ? ` · completed ${formatDateTime(session.completedAt)}` : ""}
+                    {session.leadCapturedAt ? ` · lead ${formatDateTime(session.leadCapturedAt)}` : ""}
+                    {session.offerClickedAt ? ` · cta ${formatDateTime(session.offerClickedAt)}` : ""}
+                  </p>
+                </div>
+                <div className="rounded-[1.3rem] border border-border bg-background px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground">answers</p>
+                  <p className="mt-1 text-lg font-black">{session.answers.length}</p>
+                </div>
+              </div>
+
+              {session.answers.length > 0 ? (
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  {session.answers.map((answer) => (
+                    <div key={`${session.id}-${answer.stepId}`} className="rounded-[1.15rem] border border-border bg-background px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{answer.stepId}</p>
+                          <p className="mt-2 text-sm font-semibold text-foreground">{answer.optionIds.join(", ") || "no options"}</p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{formatDateTime(answer.answeredAt)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )) : (
+            <div className="rounded-[1.4rem] border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+              no recent sessions yet.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
+function MetricCard({
+  title,
+  value,
+  detail,
+}: {
+  title: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <Card className="rounded-[1.6rem] border-border/70 bg-card/70">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <BarChart3 className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-3xl font-black tracking-tight">{value}</p>
+            <p className="text-sm text-muted-foreground">{detail}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SessionPill({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+      <Sparkles className="mr-1.5 h-3 w-3" />
+      {children}
+    </span>
+  );
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString();
+}

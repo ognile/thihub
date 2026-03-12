@@ -1,22 +1,21 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { ArrowRight, Sparkles } from 'lucide-react';
+import { buildQuizEntryUrl } from '@/lib/quizzes/url';
 import { ParticleSystem } from '@/utils/particles';
 
 export default function HeroSection() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const particleSystemRef = useRef<ParticleSystem | null>(null);
-    const [isMounted, setIsMounted] = useState(false);
+    const quizEntryUrl = buildQuizEntryUrl({ source: 'homepage-hero' });
 
     useEffect(() => {
-        setIsMounted(true);
-
         if (!canvasRef.current) return;
 
         const particleCount = window.innerWidth < 768 ? 25 : 50;
         const particleSystem = new ParticleSystem(canvasRef.current, particleCount);
-        particleSystemRef.current = particleSystem;
 
         particleSystem.start();
 
@@ -44,13 +43,11 @@ export default function HeroSection() {
             <div className="absolute inset-0 bg-gradient-to-br from-rose-100/40 via-pink-100/40 to-red-100/40 animate-gradient" />
 
             {/* Particle Canvas Overlay */}
-            {isMounted && (
-                <canvas
-                    ref={canvasRef}
-                    className="absolute inset-0 pointer-events-none"
-                    style={{ mixBlendMode: 'multiply' }}
-                />
-            )}
+            <canvas
+                ref={canvasRef}
+                className="absolute inset-0 pointer-events-none"
+                style={{ mixBlendMode: 'multiply' }}
+            />
 
             {/* Content */}
             <div className="relative z-10 flex items-center justify-center h-full px-4">
@@ -74,8 +71,29 @@ export default function HeroSection() {
                         transition={{ duration: 0.8, delay: 0.6 }}
                         className="text-lg md:text-xl text-gray-700 font-sans max-w-2xl mx-auto"
                     >
-                        A billion women. Decades of silence. It's time we had the conversation.
+                        A billion women. Decades of silence. It&apos;s time we had the conversation.
                     </motion.p>
+                    <motion.div
+                        initial={{ opacity: 0, y: 18 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.8, delay: 0.9 }}
+                        className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
+                    >
+                        <Link
+                            href={quizEntryUrl}
+                            className="group inline-flex items-center justify-center gap-3 rounded-full bg-[#0f4c81] px-8 py-4 font-sans text-sm font-bold uppercase tracking-[0.24em] text-white shadow-[0_18px_40px_rgba(15,76,129,0.28)] transition hover:translate-y-[-1px] hover:bg-[#0b3a63]"
+                        >
+                            take the 4-minute profile
+                            <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+                        </Link>
+                        <div className="rounded-full border border-white/50 bg-white/70 px-5 py-3 backdrop-blur-sm">
+                            <div className="flex items-center justify-center gap-2 text-[11px] font-sans font-semibold uppercase tracking-[0.24em] text-gray-700">
+                                <Sparkles className="h-3.5 w-3.5 text-[#0f4c81]" />
+                                homepage hero entry
+                            </div>
+                            <p className="mt-1 text-sm text-gray-600">personalized result, education, then offer</p>
+                        </div>
+                    </motion.div>
                 </motion.div>
             </div>
 

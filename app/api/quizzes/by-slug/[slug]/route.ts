@@ -1,46 +1,34 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
+import { NextResponse } from "next/server";
+import { createClient } from "@/utils/supabase/server";
+import { jsonWithEtag } from "@/lib/http/etag";
+import { recordCounter } from "@/lib/observability/counters";
+import { createDomainContextFromRequest } from "@/lib/services/domain-context";
+import { QuizService } from "@/lib/quizzes/service";
 
-// GET /api/quizzes/by-slug/[slug] - Get quiz by slug (public)
 export async function GET(
-    request: Request,
-    { params }: { params: Promise<{ slug: string }> }
+  request: Request,
+  { params }: { params: Promise<{ slug: string }> },
 ) {
-    try {
-        const { slug } = await params;
-        const supabase = await createClient();
-        
-        // Fetch published quiz by slug
-        const { data: quiz, error: quizError } = await supabase
-            .from('quizzes')
-            .select('*')
-            .eq('slug', slug)
-            .eq('status', 'published')
-            .single();
+  try {
+    const { slug } = await params;
+    const domainContext = createDomainContextFromRequest(request);
+    const supabase = await createClient();
+    const quiz = await QuizService.getPublishedBySlug(slug, { supabase });
 
-        if (quizError) {
-            if (quizError.code === 'PGRST116') {
-                return NextResponse.json({ error: 'Quiz not found' }, { status: 404 });
-            }
-            throw quizError;
-        }
-
-        // Fetch slides
-        const { data: slides, error: slidesError } = await supabase
-            .from('quiz_slides')
-            .select('*')
-            .eq('quiz_id', quiz.id)
-            .order('slide_order', { ascending: true });
-
-        if (slidesError) throw slidesError;
-
-        return NextResponse.json({
-            ...quiz,
-            slides: slides || []
-        });
-    } catch (e) {
-        console.error('Error fetching quiz:', e);
-        return NextResponse.json({ error: 'Failed to fetch quiz' }, { status: 500 });
+    if (!quiz) {
+      return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
     }
-}
 
+    recordCounter("quiz.api.get_by_slug", {
+      slug,
+      domain: domainContext.domain,
+      host: domainContext.host,
+      quizId: quiz.id,
+    });
+
+    return jsonWithEtag(request, quiz);
+  } catch (error) {
+    console.error("Error fetching quiz definition by slug:", error);
+    return NextResponse.json({ error: "Failed to fetch quiz definition" }, { status: 500 });
+  }
+}
