@@ -64,6 +64,7 @@ const OPTION_IDLE =
   "border-black/[0.08] bg-white/88 text-[#171410] shadow-[0_14px_34px_rgba(24,20,12,0.05)] hover:-translate-y-0.5 hover:border-black/[0.14] hover:shadow-[0_22px_50px_rgba(24,20,12,0.08)]";
 const OPTION_ACTIVE =
   "border-[#171614] bg-[#171614] text-white shadow-[0_24px_52px_rgba(23,22,20,0.16)]";
+const ANALYSIS_BAR_LAYOUT = [0.34, 0.52, 0.74, 0.48, 0.82, 0.58, 0.9, 0.42];
 
 interface QuizExperienceProps {
   quizId: string;
@@ -366,7 +367,7 @@ export default function QuizExperience({
       pendingAdvanceTimerRef.current = setTimeout(() => {
         pendingAdvanceTimerRef.current = null;
         submitSelection();
-      }, 260);
+      }, 380);
     },
     [currentStep, moveToSnapshot, pendingOptionId, quiz, reducedMotion, sendEvent, snapshot],
   );
@@ -546,9 +547,9 @@ export default function QuizExperience({
   const stageMotion = reducedMotion
     ? { initial: { opacity: 1 }, animate: { opacity: 1 }, exit: { opacity: 1 } }
     : {
-        initial: { opacity: 0, x: 46, y: 10, scale: 0.982, filter: "blur(12px)" },
+        initial: { opacity: 0, x: 58, y: 16, scale: 0.976, filter: "blur(16px)" },
         animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: "blur(0px)" },
-        exit: { opacity: 0, x: -38, y: -8, scale: 0.988, filter: "blur(10px)" },
+        exit: { opacity: 0, x: -46, y: -12, scale: 0.986, filter: "blur(14px)" },
       };
 
   if (isBooting || !snapshot || !currentStep) {
@@ -665,7 +666,7 @@ export default function QuizExperience({
                   initial={stageMotion.initial}
                   animate={stageMotion.animate}
                   exit={stageMotion.exit}
-                  transition={{ duration: reducedMotion ? 0 : 0.5, ease: [0.19, 1, 0.22, 1] }}
+                  transition={{ duration: reducedMotion ? 0 : 0.58, ease: [0.19, 1, 0.22, 1] }}
                 >
                   <StepSurface
                     currentStep={currentStep}
@@ -964,7 +965,7 @@ function QuestionStep({
         </Button>
       ) : (
         <p className="text-center text-xs uppercase tracking-[0.28em] text-[#8b8377]">
-          {pendingOptionId ? "locking your answer" : "tap one answer to move instantly"}
+          {pendingOptionId ? "locking your answer" : "tap once to lock and continue"}
         </p>
       )}
     </div>
@@ -1053,16 +1054,28 @@ function AnalysisStep({
   const [isFinished, setIsFinished] = useState(false);
   const stageCount = step.stages.length;
   const activeStage = step.stages[Math.min(activeStageIndex, stageCount - 1)];
+  const cumulativeDurations: number[] = [];
+  let durationCursor = 0;
+  step.stages.forEach((stage) => {
+    durationCursor += stage.durationMs;
+    cumulativeDurations.push(durationCursor);
+  });
+  const totalDurationMs = cumulativeDurations.at(-1) ?? 1;
+  const activeStageStartMs = activeStageIndex === 0 ? 0 : (cumulativeDurations[activeStageIndex - 1] ?? 0);
+  const activeStageEndMs = cumulativeDurations[activeStageIndex] ?? totalDurationMs;
+  const activeStageDurationMs = activeStage?.durationMs ?? 0;
   const completedCount = isFinished ? stageCount : completedStageIds.length;
-  const progressPercent = isFinished
-    ? 100
-    : Math.round(((activeStageIndex + 1) / stageCount) * 100);
-  const ringRadius = 38;
+  const progressStartPercent = (activeStageStartMs / totalDurationMs) * 100;
+  const progressEndPercent = isFinished ? 100 : (activeStageEndMs / totalDurationMs) * 100;
+  const stageProgressLabel = isFinished ? "locked" : "running";
+  const ringRadius = 42;
   const ringCircumference = 2 * Math.PI * ringRadius;
-  const ringOffset = ringCircumference * (1 - progressPercent / 100);
+  const ringOffsetStart = ringCircumference * (1 - progressStartPercent / 100);
+  const ringOffsetEnd = ringCircumference * (1 - progressEndPercent / 100);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    let stageTimer: ReturnType<typeof setTimeout> | null = null;
+    let finishTimer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
 
     const runStage = (index: number) => {
@@ -1073,7 +1086,7 @@ function AnalysisStep({
       if (index >= step.stages.length) {
         setIsFinished(true);
         if (step.autoAdvance) {
-          timer = setTimeout(() => onAdvance(), reducedMotion ? 0 : 420);
+          finishTimer = setTimeout(() => onAdvance(), reducedMotion ? 0 : 920);
         }
         return;
       }
@@ -1081,8 +1094,10 @@ function AnalysisStep({
       setActiveStageIndex(index);
       const durationMs = reducedMotion ? 160 : step.stages[index].durationMs;
 
-      timer = setTimeout(() => {
-        setCompletedStageIds((current) => [...current, step.stages[index].id]);
+      stageTimer = setTimeout(() => {
+        setCompletedStageIds((current) =>
+          current.includes(step.stages[index].id) ? current : [...current, step.stages[index].id],
+        );
         runStage(index + 1);
       }, durationMs);
     };
@@ -1091,8 +1106,11 @@ function AnalysisStep({
 
     return () => {
       cancelled = true;
-      if (timer) {
-        clearTimeout(timer);
+      if (stageTimer) {
+        clearTimeout(stageTimer);
+      }
+      if (finishTimer) {
+        clearTimeout(finishTimer);
       }
     };
   }, [onAdvance, reducedMotion, step]);
@@ -1105,87 +1123,189 @@ function AnalysisStep({
         {step.body ? <p className={STEP_BODY}>{step.body}</p> : null}
       </div>
 
-      <div className={cn(LIGHT_INSET, "overflow-hidden p-5 sm:p-6")}>
-        <div className="grid gap-5 sm:grid-cols-[136px_minmax(0,1fr)] sm:items-center">
-          <div className="relative mx-auto flex h-[128px] w-[128px] items-center justify-center">
-            {!reducedMotion ? (
-              <>
-                <motion.span
-                  className="absolute inset-[8px] rounded-full border border-black/8"
-                  animate={{ scale: [1, 1.08, 1], opacity: [0.18, 0.06, 0.18] }}
-                  transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-                />
-                <motion.span
-                  className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(23,22,20,0.08),rgba(23,22,20,0))]"
-                  animate={{ scale: [0.92, 1.02, 0.92], opacity: [0.45, 0.72, 0.45] }}
-                  transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
-                />
-              </>
-            ) : null}
-            <svg className="absolute inset-0 -rotate-90" viewBox="0 0 96 96" aria-hidden="true">
-              <circle
-                cx="48"
-                cy="48"
-                r={ringRadius}
-                fill="none"
-                stroke="rgba(23,22,20,0.08)"
-                strokeWidth="6"
-              />
-              <motion.circle
-                cx="48"
-                cy="48"
-                r={ringRadius}
-                fill="none"
-                stroke="#171614"
-                strokeLinecap="round"
-                strokeWidth="6"
-                initial={false}
-                animate={{ strokeDashoffset: ringOffset }}
-                strokeDasharray={ringCircumference}
-                transition={{
-                  type: reducedMotion ? "tween" : "spring",
-                  duration: reducedMotion ? 0 : undefined,
-                  stiffness: 130,
-                  damping: 24,
-                }}
-              />
-            </svg>
-            <div className="relative flex h-[86px] w-[86px] flex-col items-center justify-center rounded-full border border-black/[0.08] bg-white/92 text-[#171614] shadow-[0_12px_36px_rgba(23,22,20,0.08)]">
-              <Sparkles className="h-5 w-5" strokeWidth={1.2} />
-              <span className="mt-2 text-[11px] uppercase tracking-[0.28em] text-[#7a7268]">
-                {progressPercent}%
-              </span>
+      <div
+        className={cn(
+          LIGHT_INSET,
+          "overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(246,245,241,0.94))] p-5 sm:p-6",
+        )}
+      >
+        <div className="relative overflow-hidden rounded-[1.7rem] border border-black/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,245,242,0.94))] p-4 shadow-[0_22px_60px_rgba(23,22,20,0.07)] sm:p-5">
+          {!reducedMotion ? (
+            <motion.div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-4 left-[-28%] w-[42%] rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(23,22,20,0.08),rgba(255,255,255,0))] blur-2xl"
+              animate={{ x: ["0%", "260%"] }}
+              transition={{
+                duration: Math.max(activeStageDurationMs / 1000, 1.6),
+                repeat: Infinity,
+                ease: "linear",
+              }}
+            />
+          ) : null}
+
+          <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_148px] sm:items-center">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.28em] text-[#7f776d]">
+                <span>analysis sequence</span>
+                <span>{stageCount} phases</span>
+              </div>
+
+              <div className="rounded-[1.45rem] border border-black/[0.06] bg-[#f7f7f4] p-4">
+                <div className="flex h-[82px] items-end gap-2 overflow-hidden rounded-[1.2rem] border border-black/[0.05] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(242,242,238,0.88))] px-3 py-3">
+                  {ANALYSIS_BAR_LAYOUT.map((barHeight, index) => (
+                    <motion.div
+                      key={`analysis-bar-${index}`}
+                      className="min-w-0 flex-1 rounded-full bg-[linear-gradient(180deg,rgba(23,22,20,0.14),rgba(23,22,20,0.85))]"
+                      style={{ height: `${28 + barHeight * 42}px`, transformOrigin: "50% 100%" }}
+                      animate={
+                        reducedMotion
+                          ? undefined
+                          : {
+                              scaleY: [0.64, 1, 0.72],
+                              opacity: [0.36, 0.92, 0.44],
+                              y: [0, -3, 0],
+                            }
+                      }
+                      transition={
+                        reducedMotion
+                          ? undefined
+                          : {
+                              duration: 1.5 + index * 0.08 + activeStageIndex * 0.12,
+                              delay: index * 0.06,
+                              repeat: Infinity,
+                              repeatType: "mirror",
+                              ease: "easeInOut",
+                            }
+                      }
+                    />
+                  ))}
+                </div>
+
+                <div className="mt-4" role="status" aria-live="polite" aria-atomic="true">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[11px] uppercase tracking-[0.28em] text-[#81796f]">
+                      phase {Math.min(activeStageIndex + 1, stageCount)} of {stageCount}
+                    </p>
+                    <span className="rounded-full border border-black/[0.08] bg-white px-2.5 py-1 text-[10px] uppercase tracking-[0.28em] text-[#5f584f]">
+                      {stageProgressLabel}
+                    </span>
+                  </div>
+
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={activeStage?.id ?? "analysis-finished"}
+                      initial={reducedMotion ? undefined : { opacity: 0, y: 14, filter: "blur(10px)" }}
+                      animate={reducedMotion ? undefined : { opacity: 1, y: 0, filter: "blur(0px)" }}
+                      exit={reducedMotion ? undefined : { opacity: 0, y: -10, filter: "blur(8px)" }}
+                      transition={reducedMotion ? undefined : { duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+                      className="mt-3"
+                    >
+                      <p className="text-[1.35rem] font-semibold leading-[1.05] tracking-[-0.04em] text-[#171410]">
+                        {isFinished ? "your report is locked in." : activeStage?.label ?? "finalizing your profile"}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[#575149]">
+                        {isFinished
+                          ? "we have resolved the strongest profile and staged the result report."
+                          : activeStage?.description ?? "handoff to your result screen"}
+                      </p>
+                    </motion.div>
+                  </AnimatePresence>
+
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.28em] text-[#8a8278]">
+                      <span>current phase progress</span>
+                      <span>{isFinished ? "complete" : "in motion"}</span>
+                    </div>
+                    <div className="mt-2 h-[5px] overflow-hidden rounded-full bg-black/[0.08]">
+                      <motion.div
+                        key={`stage-progress-${isFinished ? "complete" : activeStage?.id ?? "analysis"}`}
+                        className="h-full rounded-full bg-[#171614]"
+                        initial={{ width: isFinished ? "100%" : "0%" }}
+                        animate={{ width: "100%" }}
+                        transition={{
+                          duration: isFinished ? 0.4 : reducedMotion ? 0 : activeStageDurationMs / 1000,
+                          ease: "linear",
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.28em] text-[#7f776d]">
-              <span>analysis pass</span>
-              <span>{completedCount}/{stageCount} complete</span>
-            </div>
-            <p className="mt-2 text-sm leading-6 text-[#544d46]">
-              the analysis now intentionally lingers so the sequence feels credible instead of instant.
-            </p>
-            <div className="mt-4 rounded-[1.35rem] border border-black/[0.06] bg-[#f7f3eb] px-4 py-4">
-              <p className="text-[11px] uppercase tracking-[0.28em] text-[#81796f]">
-                {activeStage?.label ?? "finalizing your profile"}
-              </p>
-              <p className="mt-2 text-base font-medium tracking-[-0.02em] text-[#171410]">
-                {activeStage?.description ?? "handoff to your result screen"}
-              </p>
+
+            <div className="mx-auto flex w-full max-w-[148px] flex-col items-center justify-center gap-4">
+              <div className="relative flex h-[138px] w-[138px] items-center justify-center">
+                {!reducedMotion ? (
+                  <>
+                    <motion.span
+                      className="absolute inset-[8px] rounded-full border border-black/[0.06]"
+                      animate={{ scale: [1, 1.06, 1], opacity: [0.12, 0.22, 0.12] }}
+                      transition={{ duration: 2.7, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                    <motion.span
+                      className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(23,22,20,0.07),rgba(23,22,20,0))]"
+                      animate={{ scale: [0.94, 1.02, 0.94], opacity: [0.26, 0.54, 0.26] }}
+                      transition={{ duration: 2.9, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                  </>
+                ) : null}
+                <svg className="absolute inset-0 -rotate-90" viewBox="0 0 104 104" aria-hidden="true">
+                  <circle
+                    cx="52"
+                    cy="52"
+                    r={ringRadius}
+                    fill="none"
+                    stroke="rgba(23,22,20,0.08)"
+                    strokeWidth="6"
+                  />
+                  <motion.circle
+                    key={`analysis-ring-${isFinished ? "complete" : activeStage?.id ?? "analysis"}`}
+                    cx="52"
+                    cy="52"
+                    r={ringRadius}
+                    fill="none"
+                    stroke="#171614"
+                    strokeLinecap="round"
+                    strokeWidth="6"
+                    strokeDasharray={ringCircumference}
+                    initial={{ strokeDashoffset: ringOffsetStart }}
+                    animate={{ strokeDashoffset: ringOffsetEnd }}
+                    transition={{
+                      duration: isFinished ? 0.42 : reducedMotion ? 0 : activeStageDurationMs / 1000,
+                      ease: "linear",
+                    }}
+                  />
+                </svg>
+                <div className="relative flex h-[92px] w-[92px] flex-col items-center justify-center rounded-full border border-black/[0.08] bg-white text-[#171614] shadow-[0_16px_42px_rgba(23,22,20,0.08)]">
+                  <Sparkles className="h-5 w-5" strokeWidth={1.2} />
+                  <span className="mt-2 text-[11px] uppercase tracking-[0.28em] text-[#6f675f]">
+                    {Math.round(progressEndPercent)}%
+                  </span>
+                </div>
+              </div>
+
+              <div className="w-full rounded-[1.3rem] border border-black/[0.07] bg-white/92 px-4 py-3 text-center shadow-[0_14px_36px_rgba(23,22,20,0.05)]">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-[#8a8278]">status</p>
+                <p className="mt-2 text-sm font-medium tracking-[-0.02em] text-[#171410]">
+                  {completedCount}/{stageCount} phases resolved
+                </p>
+                <p className="mt-1 text-xs leading-5 text-[#656057]">
+                  each pass handles a different layer before we hand off the result.
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
         <div className="mt-5 h-[5px] overflow-hidden rounded-full bg-black/[0.08]">
           <motion.div
+            key={`overall-progress-${isFinished ? "complete" : activeStage?.id ?? "analysis"}`}
             className="h-full rounded-full bg-[#171614]"
-            initial={false}
-            animate={{ width: `${Math.max(progressPercent, 8)}%` }}
+            initial={{ width: `${Math.max(progressStartPercent, 5)}%` }}
+            animate={{ width: `${Math.max(progressEndPercent, 8)}%` }}
             transition={{
-              type: reducedMotion ? "tween" : "spring",
-              duration: reducedMotion ? 0 : undefined,
-              stiffness: 180,
-              damping: 24,
+              duration: isFinished ? 0.42 : reducedMotion ? 0 : activeStageDurationMs / 1000,
+              ease: "linear",
             }}
           />
         </div>
@@ -1203,17 +1323,17 @@ function AnalysisStep({
                 className={cn(
                   "relative overflow-hidden rounded-[1.45rem] border px-4 py-4 transition duration-300",
                   isActive
-                    ? "border-[#171614] bg-[#171614] text-white shadow-[0_24px_52px_rgba(23,22,20,0.14)]"
+                    ? "border-[#171614] bg-[linear-gradient(180deg,rgba(255,255,255,1),rgba(246,245,241,0.98))] text-[#171410] shadow-[0_24px_52px_rgba(23,22,20,0.12)]"
                     : isComplete
                       ? "border-black/[0.08] bg-white text-[#171614]"
-                      : "border-black/[0.06] bg-[#f1ece3] text-[#3c3934]",
+                      : "border-black/[0.06] bg-[#f4f4f1] text-[#3c3934]",
                 )}
               >
                 <motion.div
                   aria-hidden="true"
                   className={cn(
                     "pointer-events-none absolute inset-y-0 left-0 w-full origin-left",
-                    isActive ? "bg-[linear-gradient(90deg,rgba(255,255,255,0.12),rgba(255,255,255,0))]" : "bg-black/[0.04]",
+                    isActive ? "bg-[linear-gradient(90deg,rgba(23,22,20,0.08),rgba(23,22,20,0))]" : "bg-black/[0.04]",
                   )}
                   initial={false}
                   animate={{ scaleX: isActive || isComplete ? 1 : 0 }}
@@ -1224,7 +1344,7 @@ function AnalysisStep({
                     className={cn(
                       "mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-full border",
                       isActive
-                        ? "border-white/24 bg-white/12"
+                        ? "border-black/[0.08] bg-[#171614] text-white"
                         : isComplete
                           ? "border-black/[0.08] bg-[#171614] text-white"
                           : "border-black/[0.08] bg-white",
@@ -1240,17 +1360,31 @@ function AnalysisStep({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-3">
-                      <p className={cn("text-sm font-medium tracking-[-0.01em]", isActive ? "text-white" : "text-current")}>
+                      <p className="text-sm font-medium tracking-[-0.01em] text-current">
                         {stage.label}
                       </p>
-                      <span className={cn("text-[11px] uppercase tracking-[0.26em]", isActive ? "text-white/46" : "text-[#8a8175]")}>
+                      <span className={cn("text-[11px] uppercase tracking-[0.26em]", isActive ? "text-[#5f584f]" : "text-[#8a8175]")}>
                         {String(index + 1).padStart(2, "0")}
                       </span>
                     </div>
                     {stage.description ? (
-                      <p className={cn("mt-1 text-sm leading-6", isActive ? "text-white/72" : "text-[#5b544d]")}>
+                      <p className="mt-1 text-sm leading-6 text-[#5b544d]">
                         {stage.description}
                       </p>
+                    ) : null}
+                    {isActive ? (
+                      <div className="mt-3 h-[4px] overflow-hidden rounded-full bg-black/[0.08]">
+                        <motion.div
+                          key={`stage-card-progress-${stage.id}`}
+                          className="h-full rounded-full bg-[#171614]"
+                          initial={{ width: "0%" }}
+                          animate={{ width: "100%" }}
+                          transition={{
+                            duration: reducedMotion ? 0 : stage.durationMs / 1000,
+                            ease: "linear",
+                          }}
+                        />
+                      </div>
                     ) : null}
                   </div>
                 </div>

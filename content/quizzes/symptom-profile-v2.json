@@ -611,32 +611,38 @@
       "kind": "analysis",
       "kicker": "analysis in progress",
       "title": "we are building your symptom profile now.",
-      "body": "this pass weighs your answers, checks for clusters, and compresses the noise into a cleaner result read.",
+      "body": "this sequence resolves your answer pattern in stages so the result can land like a report instead of a generic score.",
       "autoAdvance": true,
       "stages": [
         {
           "id": "stage-one",
           "label": "preparing your quiz data",
-          "description": "locking the signal set",
-          "durationMs": 1800
+          "description": "locking the signal set before any scoring starts",
+          "durationMs": 2400
         },
         {
           "id": "stage-two",
-          "label": "checking symptom overlap",
-          "description": "finding patterns that travel together",
-          "durationMs": 1750
+          "label": "mapping symptom overlap",
+          "description": "comparing the clues that keep showing up together",
+          "durationMs": 2150
         },
         {
           "id": "stage-three",
-          "label": "scoring likely root drivers",
-          "description": "testing the strongest weighted profile",
-          "durationMs": 1900
+          "label": "testing weighted profiles",
+          "description": "ranking the strongest stress, hormone, and recovery matches",
+          "durationMs": 2250
         },
         {
           "id": "stage-four",
+          "label": "assembling evidence summary",
+          "description": "selecting the criteria that matter most for your report",
+          "durationMs": 2050
+        },
+        {
+          "id": "stage-five",
           "label": "building your result report",
           "description": "graph, criteria, and next-step guidance",
-          "durationMs": 1650
+          "durationMs": 1950
         }
       ],
       "next": "result-report"
