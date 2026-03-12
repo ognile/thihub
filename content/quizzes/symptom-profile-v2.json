@@ -618,25 +618,25 @@
           "id": "stage-one",
           "label": "preparing your quiz data",
           "description": "locking the signal set",
-          "durationMs": 900
+          "durationMs": 1800
         },
         {
           "id": "stage-two",
           "label": "checking symptom overlap",
           "description": "finding patterns that travel together",
-          "durationMs": 1100
+          "durationMs": 1750
         },
         {
           "id": "stage-three",
           "label": "scoring likely root drivers",
           "description": "testing the strongest weighted profile",
-          "durationMs": 1200
+          "durationMs": 1900
         },
         {
           "id": "stage-four",
           "label": "building your result report",
           "description": "graph, criteria, and next-step guidance",
-          "durationMs": 1000
+          "durationMs": 1650
         }
       ],
       "next": "result-report"

@@ -1051,6 +1051,15 @@ function AnalysisStep({
   const [activeStageIndex, setActiveStageIndex] = useState(0);
   const [completedStageIds, setCompletedStageIds] = useState<string[]>([]);
   const [isFinished, setIsFinished] = useState(false);
+  const stageCount = step.stages.length;
+  const activeStage = step.stages[Math.min(activeStageIndex, stageCount - 1)];
+  const completedCount = isFinished ? stageCount : completedStageIds.length;
+  const progressPercent = isFinished
+    ? 100
+    : Math.round(((activeStageIndex + 1) / stageCount) * 100);
+  const ringRadius = 38;
+  const ringCircumference = 2 * Math.PI * ringRadius;
+  const ringOffset = ringCircumference * (1 - progressPercent / 100);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -1064,7 +1073,7 @@ function AnalysisStep({
       if (index >= step.stages.length) {
         setIsFinished(true);
         if (step.autoAdvance) {
-          timer = setTimeout(() => onAdvance(), reducedMotion ? 0 : 220);
+          timer = setTimeout(() => onAdvance(), reducedMotion ? 0 : 420);
         }
         return;
       }
@@ -1088,10 +1097,6 @@ function AnalysisStep({
     };
   }, [onAdvance, reducedMotion, step]);
 
-  const progressPercent = isFinished
-    ? 100
-    : Math.round(((activeStageIndex + 1) / step.stages.length) * 100);
-
   return (
     <div className="space-y-7">
       <div className="space-y-4">
@@ -1101,32 +1106,73 @@ function AnalysisStep({
       </div>
 
       <div className={cn(LIGHT_INSET, "overflow-hidden p-5 sm:p-6")}>
-        <div className="flex items-center gap-4">
-          <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-[#171614] text-white">
+        <div className="grid gap-5 sm:grid-cols-[136px_minmax(0,1fr)] sm:items-center">
+          <div className="relative mx-auto flex h-[128px] w-[128px] items-center justify-center">
             {!reducedMotion ? (
               <>
                 <motion.span
-                  className="absolute inset-0 rounded-full border border-black/10"
-                  animate={{ scale: [1, 1.28], opacity: [0.2, 0] }}
-                  transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
+                  className="absolute inset-[8px] rounded-full border border-black/8"
+                  animate={{ scale: [1, 1.08, 1], opacity: [0.18, 0.06, 0.18] }}
+                  transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
                 />
                 <motion.span
-                  className="absolute inset-[6px] rounded-full border border-white/22"
-                  animate={{ scale: [1, 1.15], opacity: [0.35, 0] }}
-                  transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut", delay: 0.25 }}
+                  className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(23,22,20,0.08),rgba(23,22,20,0))]"
+                  animate={{ scale: [0.92, 1.02, 0.92], opacity: [0.45, 0.72, 0.45] }}
+                  transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
                 />
               </>
             ) : null}
-            <Sparkles className="h-5 w-5" strokeWidth={1.2} />
+            <svg className="absolute inset-0 -rotate-90" viewBox="0 0 96 96" aria-hidden="true">
+              <circle
+                cx="48"
+                cy="48"
+                r={ringRadius}
+                fill="none"
+                stroke="rgba(23,22,20,0.08)"
+                strokeWidth="6"
+              />
+              <motion.circle
+                cx="48"
+                cy="48"
+                r={ringRadius}
+                fill="none"
+                stroke="#171614"
+                strokeLinecap="round"
+                strokeWidth="6"
+                initial={false}
+                animate={{ strokeDashoffset: ringOffset }}
+                strokeDasharray={ringCircumference}
+                transition={{
+                  type: reducedMotion ? "tween" : "spring",
+                  duration: reducedMotion ? 0 : undefined,
+                  stiffness: 130,
+                  damping: 24,
+                }}
+              />
+            </svg>
+            <div className="relative flex h-[86px] w-[86px] flex-col items-center justify-center rounded-full border border-black/[0.08] bg-white/92 text-[#171614] shadow-[0_12px_36px_rgba(23,22,20,0.08)]">
+              <Sparkles className="h-5 w-5" strokeWidth={1.2} />
+              <span className="mt-2 text-[11px] uppercase tracking-[0.28em] text-[#7a7268]">
+                {progressPercent}%
+              </span>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0">
             <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.28em] text-[#7f776d]">
               <span>analysis pass</span>
-              <span>{progressPercent}%</span>
+              <span>{completedCount}/{stageCount} complete</span>
             </div>
             <p className="mt-2 text-sm leading-6 text-[#544d46]">
-              this stage now reads as an active scan instead of a static waiting room.
+              the analysis now intentionally lingers so the sequence feels credible instead of instant.
             </p>
+            <div className="mt-4 rounded-[1.35rem] border border-black/[0.06] bg-[#f7f3eb] px-4 py-4">
+              <p className="text-[11px] uppercase tracking-[0.28em] text-[#81796f]">
+                {activeStage?.label ?? "finalizing your profile"}
+              </p>
+              <p className="mt-2 text-base font-medium tracking-[-0.02em] text-[#171410]">
+                {activeStage?.description ?? "handoff to your result screen"}
+              </p>
+            </div>
           </div>
         </div>
 
