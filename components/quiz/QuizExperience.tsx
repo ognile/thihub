@@ -6,6 +6,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -283,6 +284,19 @@ export default function QuizExperience({
     [isLive, quiz.slug],
   );
 
+  const resetViewport = useCallback(() => {
+    if (embedded) {
+      return;
+    }
+
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && activeElement !== document.body) {
+      activeElement.blur();
+    }
+
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [embedded]);
+
   useEffect(() => {
     let initialSnapshot = createInitialQuizSnapshot(
       quiz,
@@ -397,13 +411,19 @@ export default function QuizExperience({
     (nextSnapshot: QuizSessionSnapshot) => {
       persistSnapshot(nextSnapshot);
       resetDraftState();
-      if (!embedded) {
-        window.scrollTo({ top: 0, behavior: "auto" });
-      }
+      resetViewport();
       startTransition(() => setSnapshot(nextSnapshot));
     },
-    [embedded, persistSnapshot, resetDraftState],
+    [persistSnapshot, resetDraftState, resetViewport],
   );
+
+  useLayoutEffect(() => {
+    if (!snapshot?.currentStepId) {
+      return;
+    }
+
+    resetViewport();
+  }, [resetViewport, snapshot?.currentStepId]);
 
   const handleAdvance = useCallback(() => {
     if (!snapshot || !currentStep) {
