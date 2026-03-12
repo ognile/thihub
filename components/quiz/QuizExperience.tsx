@@ -40,11 +40,30 @@ import type {
 const QuizResultGraph = dynamic(() => import("./QuizResultGraph"), {
   ssr: false,
   loading: () => (
-    <div className="h-[220px] animate-pulse rounded-[1.6rem] border border-white/10 bg-white/[0.03]" />
+    <div className="h-[220px] animate-pulse rounded-[1.6rem] border border-black/[0.08] bg-black/[0.03]" />
   ),
 });
 
 const STORAGE_PREFIX = "quiz-funnel-v2";
+const LIGHT_SHELL =
+  "bg-[#f4f1ea] font-sans text-[#161410] [&_h1]:font-sans [&_h2]:font-sans [&_h3]:font-sans";
+const LIGHT_PANEL =
+  "overflow-hidden rounded-[2.15rem] border border-black/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(244,240,232,0.92))] shadow-[0_28px_90px_rgba(28,24,17,0.12)] backdrop-blur-xl";
+const LIGHT_INSET =
+  "rounded-[1.6rem] border border-black/[0.08] bg-white/82 shadow-[0_14px_48px_rgba(28,24,17,0.06)]";
+const SECONDARY_PANEL =
+  "rounded-[1.45rem] border border-black/[0.07] bg-[#f1ede4]/84 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]";
+const STEP_LABEL =
+  "text-[11px] uppercase tracking-[0.34em] text-[#7b746a]";
+const STEP_TITLE =
+  "font-sans text-[2.12rem] font-semibold leading-[0.96] tracking-[-0.065em] text-[#15130f] sm:text-[2.55rem]";
+const STEP_BODY = "text-[15px] leading-7 text-[#5a544c]";
+const PRIMARY_BUTTON =
+  "h-12 w-full rounded-full border border-[#171614] bg-[#171614] text-white shadow-[0_18px_38px_rgba(23,22,20,0.14)] transition duration-300 hover:-translate-y-0.5 hover:bg-black disabled:pointer-events-none disabled:opacity-45";
+const OPTION_IDLE =
+  "border-black/[0.08] bg-white/88 text-[#171410] shadow-[0_14px_34px_rgba(24,20,12,0.05)] hover:-translate-y-0.5 hover:border-black/[0.14] hover:shadow-[0_22px_50px_rgba(24,20,12,0.08)]";
+const OPTION_ACTIVE =
+  "border-[#171614] bg-[#171614] text-white shadow-[0_24px_52px_rgba(23,22,20,0.16)]";
 
 interface QuizExperienceProps {
   quizId: string;
@@ -105,6 +124,19 @@ function emphasisLabel(emphasis: QuizResultProfile["criteria"][number]["emphasis
   }
 }
 
+function resolvedSelectedOptionsForStep(
+  stepId: string,
+  draftStepId: string | null,
+  selectedOptions: string[],
+  snapshot: QuizSessionSnapshot | null,
+) {
+  if (draftStepId === stepId) {
+    return selectedOptions;
+  }
+
+  return snapshot?.answers.find((answer) => answer.stepId === stepId)?.optionIds ?? [];
+}
+
 export default function QuizExperience({
   quizId,
   quiz,
@@ -119,12 +151,14 @@ export default function QuizExperience({
   const [snapshot, setSnapshot] = useState<QuizSessionSnapshot | null>(null);
   const [isBooting, setIsBooting] = useState(true);
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+  const [pendingOptionId, setPendingOptionId] = useState<string | null>(null);
   const [leadValues, setLeadValues] = useState<Record<string, string>>({});
   const [consent, setConsent] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [draftStepId, setDraftStepId] = useState<string | null>(null);
   const completionSentRef = useRef(false);
   const lastViewedRef = useRef<string | null>(null);
+  const pendingAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentStep = snapshot ? getStepById(quiz, snapshot.currentStepId) : null;
   const resultProfile = resolveResultProfile(quiz, snapshot?.answers ?? []);
@@ -249,11 +283,25 @@ export default function QuizExperience({
   }, [articleSlug, currentStep, entrySource, isLive, resultProfile.id, sendEvent, snapshot]);
 
   const resetDraftState = useCallback(() => {
+    if (pendingAdvanceTimerRef.current) {
+      clearTimeout(pendingAdvanceTimerRef.current);
+      pendingAdvanceTimerRef.current = null;
+    }
+
     setDraftStepId(null);
     setSelectedOptions([]);
+    setPendingOptionId(null);
     setLeadValues({});
     setConsent(false);
     setSubmissionError(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pendingAdvanceTimerRef.current) {
+        clearTimeout(pendingAdvanceTimerRef.current);
+      }
+    };
   }, []);
 
   const moveToSnapshot = useCallback(
@@ -281,31 +329,46 @@ export default function QuizExperience({
 
   const handleSingleSelect = useCallback(
     (optionId: string) => {
-      if (!snapshot || !currentStep) {
+      if (!snapshot || !currentStep || pendingOptionId) {
         return;
       }
 
-      try {
-        const nextSnapshot = advanceQuizSnapshot(quiz, snapshot, {
-          stepId: currentStep.id,
-          optionIds: [optionId],
-        });
+      const submitSelection = () => {
+        try {
+          const nextSnapshot = advanceQuizSnapshot(quiz, snapshot, {
+            stepId: currentStep.id,
+            optionIds: [optionId],
+          });
 
-        void sendEvent({
-          sessionToken: snapshot.sessionToken,
-          eventType: "answer_submitted",
-          stepId: currentStep.id,
-          nextStepId: nextSnapshot.currentStepId,
-          optionIds: [optionId],
-        });
+          void sendEvent({
+            sessionToken: snapshot.sessionToken,
+            eventType: "answer_submitted",
+            stepId: currentStep.id,
+            nextStepId: nextSnapshot.currentStepId,
+            optionIds: [optionId],
+          });
 
-        moveToSnapshot(nextSnapshot);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "failed to submit answer";
-        setSubmissionError(message);
+          moveToSnapshot(nextSnapshot);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "failed to submit answer";
+          setPendingOptionId(null);
+          setSubmissionError(message);
+        }
+      };
+
+      if (reducedMotion) {
+        submitSelection();
+        return;
       }
+
+      setSubmissionError(null);
+      setPendingOptionId(optionId);
+      pendingAdvanceTimerRef.current = setTimeout(() => {
+        pendingAdvanceTimerRef.current = null;
+        submitSelection();
+      }, 260);
     },
-    [currentStep, moveToSnapshot, quiz, sendEvent, snapshot],
+    [currentStep, moveToSnapshot, pendingOptionId, quiz, reducedMotion, sendEvent, snapshot],
   );
 
   const handleMultiSelectContinue = useCallback(() => {
@@ -314,9 +377,10 @@ export default function QuizExperience({
     }
 
     try {
+      const optionIds = resolvedSelectedOptionsForStep(currentStep.id, draftStepId, selectedOptions, snapshot);
       const nextSnapshot = advanceQuizSnapshot(quiz, snapshot, {
         stepId: currentStep.id,
-        optionIds: resolvedSelectedOptionsForStep(currentStep.id, draftStepId, selectedOptions, snapshot),
+        optionIds,
       });
 
       void sendEvent({
@@ -324,7 +388,7 @@ export default function QuizExperience({
         eventType: "answer_submitted",
         stepId: currentStep.id,
         nextStepId: nextSnapshot.currentStepId,
-        optionIds: resolvedSelectedOptionsForStep(currentStep.id, draftStepId, selectedOptions, snapshot),
+        optionIds,
       });
 
       moveToSnapshot(nextSnapshot);
@@ -374,6 +438,12 @@ export default function QuizExperience({
       return;
     }
 
+    if (pendingAdvanceTimerRef.current) {
+      clearTimeout(pendingAdvanceTimerRef.current);
+      pendingAdvanceTimerRef.current = null;
+    }
+
+    setPendingOptionId(null);
     completionSentRef.current = false;
     const nextSnapshot = retreatQuizSnapshot(quiz, snapshot);
     moveToSnapshot(nextSnapshot);
@@ -470,13 +540,15 @@ export default function QuizExperience({
   const resolvedConsent = draftMatchesCurrentStep ? consent : savedConsent;
   const resolvedSubmissionError = draftMatchesCurrentStep ? submissionError : null;
   const sourceLabel = entrySource.replace(/-/g, " ");
+  const visibleProgress = Math.max(progress.percent, 6);
+  const progressIndicatorLeft = Math.min(Math.max(visibleProgress, 6), 97);
 
   const stageMotion = reducedMotion
     ? { initial: { opacity: 1 }, animate: { opacity: 1 }, exit: { opacity: 1 } }
     : {
-        initial: { opacity: 0, y: 24 },
-        animate: { opacity: 1, y: 0 },
-        exit: { opacity: 0, y: -18 },
+        initial: { opacity: 0, x: 46, y: 10, scale: 0.982, filter: "blur(12px)" },
+        animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: "blur(0px)" },
+        exit: { opacity: 0, x: -38, y: -8, scale: 0.988, filter: "blur(10px)" },
       };
 
   if (isBooting || !snapshot || !currentStep) {
@@ -484,19 +556,18 @@ export default function QuizExperience({
       <div
         data-quiz-shell="monochrome"
         className={cn(
-          embedded
-            ? "min-h-full bg-[#050505] font-sans text-white [&_h1]:font-sans [&_h2]:font-sans [&_h3]:font-sans"
-            : "min-h-screen bg-[#050505] font-sans text-white [&_h1]:font-sans [&_h2]:font-sans [&_h3]:font-sans",
+          embedded ? `min-h-full ${LIGHT_SHELL}` : `min-h-screen ${LIGHT_SHELL}`,
           className,
         )}
       >
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.92),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(17,17,17,0.08),transparent_28%),linear-gradient(180deg,#faf8f2_0%,#ebe5da_100%)]" />
         <div
           className={cn(
             "mx-auto flex max-w-[1160px] items-center justify-center px-4 py-6 sm:px-6",
             embedded ? "min-h-[860px]" : "min-h-screen",
           )}
         >
-          <Loader2 className="h-8 w-8 animate-spin text-white/60" strokeWidth={1.2} />
+          <Loader2 className="h-8 w-8 animate-spin text-black/42" strokeWidth={1.2} />
         </div>
       </div>
     );
@@ -506,71 +577,102 @@ export default function QuizExperience({
     <div
       data-quiz-shell="monochrome"
       className={cn(
-        embedded
-          ? "min-h-full overflow-hidden bg-[#050505] font-sans text-white [&_h1]:font-sans [&_h2]:font-sans [&_h3]:font-sans"
-          : "min-h-screen overflow-hidden bg-[#050505] font-sans text-white [&_h1]:font-sans [&_h2]:font-sans [&_h3]:font-sans",
+        embedded ? `min-h-full overflow-hidden ${LIGHT_SHELL}` : `min-h-screen overflow-hidden ${LIGHT_SHELL}`,
         className,
       )}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.16),_transparent_28%),linear-gradient(180deg,#0a0a0a_0%,#030303_100%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-40 [background-image:linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:32px_32px]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.94),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(17,17,17,0.08),transparent_30%),linear-gradient(180deg,#faf8f2_0%,#ebe5da_100%)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-70 [background-image:linear-gradient(rgba(17,17,17,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(17,17,17,0.045)_1px,transparent_1px)] [background-size:28px_28px] [mask-image:radial-gradient(circle_at_center,black,transparent_82%)]" />
+      <motion.div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-12 h-[26rem] w-[26rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.74),rgba(255,255,255,0))]"
+        animate={reducedMotion ? undefined : { scale: [1, 1.06, 1], opacity: [0.65, 0.9, 0.65] }}
+        transition={reducedMotion ? undefined : { duration: 7, repeat: Infinity, ease: "easeInOut" }}
+      />
       <div
         className={cn(
           "relative mx-auto flex w-full max-w-[1160px] items-center justify-center px-4 py-6 sm:px-6 lg:px-10",
-          embedded ? "min-h-[860px]" : "min-h-screen",
+          embedded ? "min-h-[920px]" : "min-h-screen",
         )}
       >
-        <div className="w-full max-w-[430px]">
-          <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))] shadow-[0_40px_120px_rgba(0,0,0,0.65)] backdrop-blur-xl">
-            <div className="border-b border-white/10 px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
+        <div className="w-full max-w-[446px]">
+          <motion.div
+            initial={reducedMotion ? undefined : { opacity: 0, y: 18, scale: 0.988 }}
+            animate={reducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
+            transition={reducedMotion ? undefined : { duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+            className={LIGHT_PANEL}
+          >
+            <div className="border-b border-black/[0.08] px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
               <div className="flex items-center justify-between gap-3">
                 {snapshot.trail.length > 1 ? (
                   <button
                     type="button"
                     onClick={handleBack}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white transition hover:border-white/20 hover:bg-white/[0.08]"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/[0.08] bg-white/88 text-[#171614] transition duration-300 hover:-translate-y-0.5 hover:border-black/[0.16] hover:bg-white"
                   >
                     <ChevronLeft className="h-4 w-4" strokeWidth={1.2} />
                   </button>
                 ) : (
-                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] uppercase tracking-[0.28em] text-white/72">
+                  <motion.div
+                    initial={reducedMotion ? undefined : { opacity: 0, x: -10 }}
+                    animate={reducedMotion ? undefined : { opacity: 1, x: 0 }}
+                    transition={reducedMotion ? undefined : { duration: 0.35, delay: 0.12 }}
+                    className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/84 px-3 py-2 text-[11px] uppercase tracking-[0.28em] text-[#5f584f]"
+                  >
                     <Sparkles className="h-3.5 w-3.5" strokeWidth={1.2} />
                     private flow
-                  </div>
+                  </motion.div>
                 )}
 
                 <div className="text-right">
-                  <p className="text-[11px] uppercase tracking-[0.28em] text-white/48">{sourceLabel}</p>
-                  <p className="mt-1 text-xs text-white/74">
+                  <p className="text-[11px] uppercase tracking-[0.28em] text-[#81796f]">{sourceLabel}</p>
+                  <p className="mt-1 text-xs text-[#302c27]">
                     {progress.current}/{progress.total}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-5 h-[2px] overflow-hidden rounded-full bg-white/10">
+              <div className="relative mt-5 h-[4px] overflow-hidden rounded-full bg-black/[0.08]">
                 <motion.div
-                  className="h-full rounded-full bg-white"
+                  className="h-full rounded-full bg-[#171614]"
                   initial={false}
-                  animate={{ width: `${progress.percent}%` }}
-                  transition={{ duration: reducedMotion ? 0 : 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  animate={{ width: `${visibleProgress}%` }}
+                  transition={{
+                    type: reducedMotion ? "tween" : "spring",
+                    duration: reducedMotion ? 0 : undefined,
+                    stiffness: 170,
+                    damping: 24,
+                  }}
+                />
+                <motion.div
+                  className="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border border-white bg-[#171614] shadow-[0_0_0_4px_rgba(23,22,20,0.12)]"
+                  initial={false}
+                  animate={{ left: `calc(${progressIndicatorLeft}% - 6px)` }}
+                  transition={{
+                    type: reducedMotion ? "tween" : "spring",
+                    duration: reducedMotion ? 0 : undefined,
+                    stiffness: 170,
+                    damping: 24,
+                  }}
                 />
               </div>
             </div>
 
-            <div className="relative min-h-[680px] px-5 py-6 sm:px-6 sm:py-7">
+            <div className="relative min-h-[710px] px-5 py-6 sm:px-6 sm:py-7">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={`${currentStep.id}:${snapshot.trail.length}`}
                   initial={stageMotion.initial}
                   animate={stageMotion.animate}
                   exit={stageMotion.exit}
-                  transition={{ duration: reducedMotion ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ duration: reducedMotion ? 0 : 0.5, ease: [0.19, 1, 0.22, 1] }}
                 >
                   <StepSurface
                     currentStep={currentStep}
                     quiz={quiz}
                     resultProfile={resultProfile}
                     selectedOptions={resolvedSelectedOptions}
+                    pendingOptionId={pendingOptionId}
                     leadValues={resolvedLeadValues}
                     consent={resolvedConsent}
                     submissionError={resolvedSubmissionError}
@@ -587,24 +689,11 @@ export default function QuizExperience({
                 </motion.div>
               </AnimatePresence>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
     </div>
   );
-}
-
-function resolvedSelectedOptionsForStep(
-  stepId: string,
-  draftStepId: string | null,
-  selectedOptions: string[],
-  snapshot: QuizSessionSnapshot | null,
-) {
-  if (draftStepId === stepId) {
-    return selectedOptions;
-  }
-
-  return snapshot?.answers.find((answer) => answer.stepId === stepId)?.optionIds ?? [];
 }
 
 function StepSurface({
@@ -612,6 +701,7 @@ function StepSurface({
   quiz,
   resultProfile,
   selectedOptions,
+  pendingOptionId,
   leadValues,
   consent,
   submissionError,
@@ -629,6 +719,7 @@ function StepSurface({
   quiz: QuizDefinition;
   resultProfile: QuizResultProfile;
   selectedOptions: string[];
+  pendingOptionId: string | null;
   leadValues: Record<string, string>;
   consent: boolean;
   submissionError: string | null;
@@ -643,14 +734,16 @@ function StepSurface({
   onOfferClick: () => void;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       {currentStep.kind === "welcome" ? (
-        <WelcomeStep step={currentStep} onAdvance={onAdvance} />
+        <WelcomeStep step={currentStep} reducedMotion={reducedMotion} onAdvance={onAdvance} />
       ) : null}
 
       {currentStep.kind === "question" ? (
         <QuestionStep
           step={currentStep}
+          pendingOptionId={pendingOptionId}
+          reducedMotion={reducedMotion}
           selectedOptions={selectedOptions}
           onSingleSelect={onSingleSelect}
           onToggleOption={onToggleOption}
@@ -659,7 +752,7 @@ function StepSurface({
       ) : null}
 
       {currentStep.kind === "message" ? (
-        <MessageStep step={currentStep} onAdvance={onAdvance} />
+        <MessageStep step={currentStep} reducedMotion={reducedMotion} onAdvance={onAdvance} />
       ) : null}
 
       {currentStep.kind === "analysis" ? (
@@ -667,7 +760,12 @@ function StepSurface({
       ) : null}
 
       {currentStep.kind === "result" ? (
-        <ResultStep step={currentStep} resultProfile={resultProfile} onAdvance={onAdvance} />
+        <ResultStep
+          step={currentStep}
+          resultProfile={resultProfile}
+          reducedMotion={reducedMotion}
+          onAdvance={onAdvance}
+        />
       ) : null}
 
       {currentStep.kind === "lead" ? (
@@ -686,12 +784,12 @@ function StepSurface({
       ) : null}
 
       {submissionError ? (
-        <p className="rounded-2xl border border-white/12 bg-white/[0.04] px-4 py-3 text-sm text-white/82">
+        <p className="rounded-[1.35rem] border border-black/[0.08] bg-white/80 px-4 py-3 text-sm text-[#3d3832]">
           {submissionError}
         </p>
       ) : null}
 
-      <div className="flex items-center justify-between border-t border-white/10 pt-4 text-[11px] uppercase tracking-[0.28em] text-white/38">
+      <div className="flex items-center justify-between border-t border-black/[0.08] pt-4 text-[11px] uppercase tracking-[0.28em] text-[#847c71]">
         <span>{quiz.name}</span>
         <span>{currentStep.kind}</span>
       </div>
@@ -701,53 +799,60 @@ function StepSurface({
 
 function WelcomeStep({
   step,
+  reducedMotion,
   onAdvance,
 }: {
   step: Extract<QuizStep, { kind: "welcome" }>;
+  reducedMotion: boolean;
   onAdvance: () => void;
 }) {
   return (
-    <div className="space-y-6">
-      <div className="space-y-4">
-        {step.kicker ? (
-          <p className="text-[11px] uppercase tracking-[0.34em] text-white/46">{step.kicker}</p>
-        ) : null}
-        <h1 className="font-sans text-[2.25rem] font-semibold leading-[0.98] tracking-[-0.06em] text-white sm:text-[2.65rem]">
-          {step.title}
-        </h1>
-        {step.body ? (
-          <p className="max-w-[32rem] text-base leading-7 text-white/68">{step.body}</p>
-        ) : null}
+    <div className="space-y-7">
+      <div className="space-y-5">
+        {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
+        <h1 className={STEP_TITLE}>{step.title}</h1>
+        {step.body ? <p className={cn(STEP_BODY, "max-w-[32rem]")}>{step.body}</p> : null}
       </div>
 
       <div className="grid gap-3">
-        {step.trustPoints.map((point) => (
-          <div
+        {step.trustPoints.map((point, index) => (
+          <motion.div
             key={point}
-            className="flex items-center gap-3 rounded-[1.4rem] border border-white/10 bg-white/[0.03] px-4 py-4"
+            initial={reducedMotion ? undefined : { opacity: 0, y: 16 }}
+            animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+            transition={reducedMotion ? undefined : { duration: 0.32, delay: 0.08 * index }}
+            className={cn(LIGHT_INSET, "flex items-center gap-3 px-4 py-4")}
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-white/[0.06]">
-              <Check className="h-4 w-4 text-white/86" strokeWidth={1.2} />
+            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-black/[0.08] bg-[#171614] text-white">
+              <Check className="h-4 w-4" strokeWidth={1.2} />
             </div>
-            <p className="text-sm leading-6 text-white/78">{point}</p>
-          </div>
+            <p className="text-sm leading-6 text-[#3f3a33]">{point}</p>
+          </motion.div>
         ))}
       </div>
 
-      <button
+      <motion.button
         type="button"
         onClick={onAdvance}
-        className="group flex w-full items-center justify-between rounded-[1.6rem] border border-white/12 bg-white px-5 py-5 text-left text-black transition hover:translate-y-[-1px] hover:bg-white/92"
+        whileTap={reducedMotion ? undefined : { scale: 0.992 }}
+        whileHover={reducedMotion ? undefined : { y: -2 }}
+        className="group relative flex w-full items-center justify-between overflow-hidden rounded-[1.75rem] border border-[#171614] bg-[#171614] px-5 py-5 text-left text-white shadow-[0_24px_50px_rgba(23,22,20,0.16)]"
       >
-        <div className="space-y-2">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-black/54">begin</p>
+        <motion.div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-[linear-gradient(90deg,rgba(255,255,255,0.18),rgba(255,255,255,0))]"
+          animate={reducedMotion ? undefined : { x: ["-100%", "220%"] }}
+          transition={reducedMotion ? undefined : { duration: 1.8, repeat: Infinity, repeatDelay: 1.2, ease: "easeInOut" }}
+        />
+        <div className="relative space-y-2">
+          <p className="text-[11px] uppercase tracking-[0.3em] text-white/56">begin</p>
           <p className="text-xl font-semibold tracking-[-0.03em]">{step.primaryLabel}</p>
           {step.secondaryLabel ? (
-            <p className="text-sm leading-6 text-black/66">{step.secondaryLabel}</p>
+            <p className="text-sm leading-6 text-white/68">{step.secondaryLabel}</p>
           ) : null}
         </div>
-        <ArrowRight className="h-5 w-5 text-black transition group-hover:translate-x-0.5" strokeWidth={1.2} />
-      </button>
+        <ArrowRight className="relative h-5 w-5 transition group-hover:translate-x-0.5" strokeWidth={1.2} />
+      </motion.button>
     </div>
   );
 }
@@ -755,33 +860,33 @@ function WelcomeStep({
 function QuestionStep({
   step,
   selectedOptions,
+  pendingOptionId,
+  reducedMotion,
   onSingleSelect,
   onToggleOption,
   onContinue,
 }: {
   step: Extract<QuizStep, { kind: "question" }>;
   selectedOptions: string[];
+  pendingOptionId: string | null;
+  reducedMotion: boolean;
   onSingleSelect: (optionId: string) => void;
   onToggleOption: (optionId: string) => void;
   onContinue: () => void;
 }) {
+  const interactionLocked = step.selection === "single" && pendingOptionId !== null;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div className="space-y-4">
-        {step.kicker ? (
-          <p className="text-[11px] uppercase tracking-[0.34em] text-white/46">{step.kicker}</p>
-        ) : null}
-        <h1 className="font-sans text-[2.05rem] font-semibold leading-[1.02] tracking-[-0.05em] text-white sm:text-[2.4rem]">
-          {step.title}
-        </h1>
-        {step.body ? (
-          <p className="text-base leading-7 text-white/66">{step.body}</p>
-        ) : null}
+        {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
+        <h1 className={STEP_TITLE}>{step.title}</h1>
+        {step.body ? <p className={STEP_BODY}>{step.body}</p> : null}
       </div>
 
       <div className="grid gap-3">
         {step.options.map((option, index) => {
-          const isSelected = selectedOptions.includes(option.id);
+          const isSelected = selectedOptions.includes(option.id) || pendingOptionId === option.id;
           const action = step.selection === "single"
             ? () => onSingleSelect(option.id)
             : () => onToggleOption(option.id);
@@ -791,39 +896,58 @@ function QuestionStep({
               key={option.id}
               type="button"
               onClick={action}
-              whileTap={{ scale: 0.985 }}
+              disabled={interactionLocked && !isSelected}
+              initial={reducedMotion ? undefined : { opacity: 0, y: 20, scale: 0.985 }}
+              animate={reducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
+              transition={reducedMotion ? undefined : { duration: 0.32, delay: index * 0.055, ease: [0.22, 1, 0.36, 1] }}
+              whileTap={interactionLocked ? undefined : { scale: 0.988 }}
+              whileHover={interactionLocked ? undefined : { y: -2 }}
               className={cn(
-                "group w-full rounded-[1.5rem] border px-4 py-4 text-left transition sm:px-5",
-                isSelected
-                  ? "border-white bg-white text-black shadow-[0_16px_50px_rgba(255,255,255,0.08)]"
-                  : "border-white/10 bg-white/[0.03] text-white hover:border-white/18 hover:bg-white/[0.06]",
+                "group relative w-full overflow-hidden rounded-[1.55rem] border px-4 py-4 text-left transition duration-300 sm:px-5",
+                isSelected ? OPTION_ACTIVE : OPTION_IDLE,
+                interactionLocked && !isSelected ? "opacity-60" : "",
               )}
             >
+              <motion.div
+                aria-hidden="true"
+                className={cn(
+                  "pointer-events-none absolute inset-y-0 left-0 w-full origin-left",
+                  isSelected ? "bg-[linear-gradient(90deg,rgba(255,255,255,0.14),rgba(255,255,255,0))]" : "bg-[linear-gradient(90deg,rgba(23,22,20,0.045),rgba(23,22,20,0))]",
+                )}
+                initial={false}
+                animate={{ scaleX: isSelected ? 1 : 0 }}
+                transition={{ duration: reducedMotion ? 0 : 0.24, ease: "easeOut" }}
+              />
               <div className="flex items-start gap-4">
                 <div
                   className={cn(
                     "mt-1 flex h-6 w-6 flex-none items-center justify-center rounded-full border transition",
-                    isSelected ? "border-black bg-black text-white" : "border-white/30 bg-transparent text-transparent",
+                    isSelected ? "border-white/65 bg-white text-[#171614]" : "border-black/20 bg-transparent text-transparent",
                   )}
                 >
-                  <span className={cn("h-2.5 w-2.5 rounded-full", isSelected ? "bg-white" : "bg-transparent")} />
+                  <motion.span
+                    className={cn("h-2.5 w-2.5 rounded-full", isSelected ? "bg-[#171614]" : "bg-transparent")}
+                    initial={false}
+                    animate={{ scale: isSelected ? 1 : 0.4, opacity: isSelected ? 1 : 0 }}
+                    transition={{ duration: reducedMotion ? 0 : 0.18 }}
+                  />
                 </div>
                 <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex items-center justify-between gap-3">
-                    <p className={cn("text-lg font-medium tracking-[-0.02em]", isSelected ? "text-black" : "text-white")}>
+                    <p className={cn("text-lg font-medium tracking-[-0.02em]", isSelected ? "text-white" : "text-[#171410]")}>
                       {option.label}
                     </p>
-                    <span className={cn("text-xs uppercase tracking-[0.28em]", isSelected ? "text-black/52" : "text-white/34")}>
+                    <span className={cn("text-xs uppercase tracking-[0.28em]", isSelected ? "text-white/54" : "text-[#8c8377]")}>
                       {String(index + 1).padStart(2, "0")}
                     </span>
                   </div>
                   {option.description ? (
-                    <p className={cn("text-sm leading-6", isSelected ? "text-black/64" : "text-white/56")}>
+                    <p className={cn("text-sm leading-6", isSelected ? "text-white/74" : "text-[#5d564d]")}>
                       {option.description}
                     </p>
                   ) : null}
                   {option.revealNote ? (
-                    <p className={cn("text-[11px] uppercase tracking-[0.28em]", isSelected ? "text-black/48" : "text-white/34")}>
+                    <p className={cn("text-[11px] uppercase tracking-[0.28em]", isSelected ? "text-white/44" : "text-[#8f877c]")}>
                       {option.revealNote}
                     </p>
                   ) : null}
@@ -835,79 +959,81 @@ function QuestionStep({
       </div>
 
       {step.selection === "multiple" ? (
-        <Button
-          onClick={onContinue}
-          disabled={selectedOptions.length === 0}
-          className="h-12 w-full rounded-full bg-white text-black hover:bg-white/92"
-        >
+        <Button onClick={onContinue} disabled={selectedOptions.length === 0} className={PRIMARY_BUTTON}>
           {step.continueLabel ?? "continue"}
         </Button>
-      ) : null}
+      ) : (
+        <p className="text-center text-xs uppercase tracking-[0.28em] text-[#8b8377]">
+          {pendingOptionId ? "locking your answer" : "tap one answer to move instantly"}
+        </p>
+      )}
     </div>
   );
 }
 
 function MessageStep({
   step,
+  reducedMotion,
   onAdvance,
 }: {
   step: Extract<QuizStep, { kind: "message" }>;
+  reducedMotion: boolean;
   onAdvance: () => void;
 }) {
   return (
-    <div className="space-y-6">
-      <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-        <div className="space-y-4">
-          {step.kicker ? (
-            <p className="text-[11px] uppercase tracking-[0.34em] text-white/46">{step.kicker}</p>
-          ) : null}
-          <h1 className="font-sans text-[2rem] font-semibold leading-[1.02] tracking-[-0.05em] text-white sm:text-[2.35rem]">
-            {step.title}
-          </h1>
-          {step.body ? (
-            <p className="text-base leading-7 text-white/68">{step.body}</p>
-          ) : null}
+    <div className="space-y-7">
+      <div className={cn(LIGHT_INSET, "overflow-hidden p-5 sm:p-6")}>
+        <div className="space-y-5">
+          {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
+          <h1 className={STEP_TITLE}>{step.title}</h1>
+          {step.body ? <p className={STEP_BODY}>{step.body}</p> : null}
         </div>
 
         {step.highlights?.length ? (
           <div className="mt-6 grid gap-3">
-            {step.highlights.map((highlight) => (
-              <div
+            {step.highlights.map((highlight, index) => (
+              <motion.div
                 key={highlight.id}
-                className="rounded-[1.5rem] border border-white/10 bg-black/30 px-4 py-4"
+                initial={reducedMotion ? undefined : { opacity: 0, y: 18 }}
+                animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+                transition={reducedMotion ? undefined : { duration: 0.34, delay: 0.09 * index }}
+                className="rounded-[1.55rem] border border-[#171614] bg-[#171614] px-4 py-4 text-white shadow-[0_24px_52px_rgba(23,22,20,0.12)]"
               >
-                <p className="text-[11px] uppercase tracking-[0.3em] text-white/42">{highlight.label}</p>
+                <p className="text-[11px] uppercase tracking-[0.3em] text-white/44">{highlight.label}</p>
                 <p className="mt-3 text-lg font-medium leading-7 tracking-[-0.03em] text-white">
                   {highlight.value}
                 </p>
-              </div>
+              </motion.div>
             ))}
           </div>
         ) : null}
 
         {step.bullets?.length ? (
           <div className="mt-6 grid gap-3">
-            {step.bullets.map((bullet) => (
-              <div key={bullet} className="flex gap-3 rounded-[1.3rem] border border-white/8 bg-white/[0.02] px-4 py-4">
-                <div className="mt-1 flex h-6 w-6 flex-none items-center justify-center rounded-full border border-white/14 bg-white/[0.06]">
-                  <Check className="h-3.5 w-3.5 text-white/84" strokeWidth={1.2} />
+            {step.bullets.map((bullet, index) => (
+              <motion.div
+                key={bullet}
+                initial={reducedMotion ? undefined : { opacity: 0, x: -14 }}
+                animate={reducedMotion ? undefined : { opacity: 1, x: 0 }}
+                transition={reducedMotion ? undefined : { duration: 0.28, delay: 0.07 * index }}
+                className={cn(SECONDARY_PANEL, "flex gap-3 px-4 py-4")}
+              >
+                <div className="mt-1 flex h-6 w-6 flex-none items-center justify-center rounded-full border border-black/[0.08] bg-white">
+                  <Check className="h-3.5 w-3.5 text-[#171614]" strokeWidth={1.2} />
                 </div>
-                <p className="text-sm leading-6 text-white/72">{bullet}</p>
-              </div>
+                <p className="text-sm leading-6 text-[#514a43]">{bullet}</p>
+              </motion.div>
             ))}
           </div>
         ) : null}
       </div>
 
-      <Button
-        onClick={onAdvance}
-        className="h-12 w-full rounded-full bg-white text-black hover:bg-white/92"
-      >
+      <Button onClick={onAdvance} className={PRIMARY_BUTTON}>
         {step.primaryLabel}
       </Button>
 
       {step.secondaryLabel ? (
-        <p className="text-center text-xs uppercase tracking-[0.28em] text-white/40">{step.secondaryLabel}</p>
+        <p className="text-center text-xs uppercase tracking-[0.28em] text-[#8d857b]">{step.secondaryLabel}</p>
       ) : null}
     </div>
   );
@@ -938,13 +1064,13 @@ function AnalysisStep({
       if (index >= step.stages.length) {
         setIsFinished(true);
         if (step.autoAdvance) {
-          timer = setTimeout(() => onAdvance(), reducedMotion ? 0 : 180);
+          timer = setTimeout(() => onAdvance(), reducedMotion ? 0 : 220);
         }
         return;
       }
 
       setActiveStageIndex(index);
-      const durationMs = reducedMotion ? 120 : step.stages[index].durationMs;
+      const durationMs = reducedMotion ? 160 : step.stages[index].durationMs;
 
       timer = setTimeout(() => {
         setCompletedStageIds((current) => [...current, step.stages[index].id]);
@@ -967,30 +1093,54 @@ function AnalysisStep({
     : Math.round(((activeStageIndex + 1) / step.stages.length) * 100);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div className="space-y-4">
-        {step.kicker ? (
-          <p className="text-[11px] uppercase tracking-[0.34em] text-white/46">{step.kicker}</p>
-        ) : null}
-        <h1 className="font-sans text-[2rem] font-semibold leading-[1.02] tracking-[-0.05em] text-white sm:text-[2.35rem]">
-          {step.title}
-        </h1>
-        {step.body ? (
-          <p className="text-base leading-7 text-white/66">{step.body}</p>
-        ) : null}
+        {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
+        <h1 className={STEP_TITLE}>{step.title}</h1>
+        {step.body ? <p className={STEP_BODY}>{step.body}</p> : null}
       </div>
 
-      <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-        <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.28em] text-white/44">
-          <span>analysis pass</span>
-          <span>{progressPercent}%</span>
+      <div className={cn(LIGHT_INSET, "overflow-hidden p-5 sm:p-6")}>
+        <div className="flex items-center gap-4">
+          <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-[#171614] text-white">
+            {!reducedMotion ? (
+              <>
+                <motion.span
+                  className="absolute inset-0 rounded-full border border-black/10"
+                  animate={{ scale: [1, 1.28], opacity: [0.2, 0] }}
+                  transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
+                />
+                <motion.span
+                  className="absolute inset-[6px] rounded-full border border-white/22"
+                  animate={{ scale: [1, 1.15], opacity: [0.35, 0] }}
+                  transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut", delay: 0.25 }}
+                />
+              </>
+            ) : null}
+            <Sparkles className="h-5 w-5" strokeWidth={1.2} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.28em] text-[#7f776d]">
+              <span>analysis pass</span>
+              <span>{progressPercent}%</span>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-[#544d46]">
+              this stage now reads as an active scan instead of a static waiting room.
+            </p>
+          </div>
         </div>
-        <div className="mt-4 h-[2px] overflow-hidden rounded-full bg-white/10">
+
+        <div className="mt-5 h-[5px] overflow-hidden rounded-full bg-black/[0.08]">
           <motion.div
-            className="h-full rounded-full bg-white"
+            className="h-full rounded-full bg-[#171614]"
             initial={false}
-            animate={{ width: `${progressPercent}%` }}
-            transition={{ duration: reducedMotion ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
+            animate={{ width: `${Math.max(progressPercent, 8)}%` }}
+            transition={{
+              type: reducedMotion ? "tween" : "spring",
+              duration: reducedMotion ? 0 : undefined,
+              stiffness: 180,
+              damping: 24,
+            }}
           />
         </div>
 
@@ -999,45 +1149,73 @@ function AnalysisStep({
             const isActive = index === activeStageIndex && !isFinished;
             const isComplete = completedStageIds.includes(stage.id) || isFinished;
             return (
-              <div
+              <motion.div
                 key={stage.id}
+                initial={reducedMotion ? undefined : { opacity: 0, y: 18 }}
+                animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+                transition={reducedMotion ? undefined : { duration: 0.28, delay: 0.06 * index }}
                 className={cn(
-                  "rounded-[1.4rem] border px-4 py-4 transition",
+                  "relative overflow-hidden rounded-[1.45rem] border px-4 py-4 transition duration-300",
                   isActive
-                    ? "border-white/18 bg-white/[0.08]"
+                    ? "border-[#171614] bg-[#171614] text-white shadow-[0_24px_52px_rgba(23,22,20,0.14)]"
                     : isComplete
-                      ? "border-white/10 bg-white/[0.04]"
-                      : "border-white/8 bg-black/30",
+                      ? "border-black/[0.08] bg-white text-[#171614]"
+                      : "border-black/[0.06] bg-[#f1ece3] text-[#3c3934]",
                 )}
               >
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-full border border-white/14 bg-white/[0.06]">
+                <motion.div
+                  aria-hidden="true"
+                  className={cn(
+                    "pointer-events-none absolute inset-y-0 left-0 w-full origin-left",
+                    isActive ? "bg-[linear-gradient(90deg,rgba(255,255,255,0.12),rgba(255,255,255,0))]" : "bg-black/[0.04]",
+                  )}
+                  initial={false}
+                  animate={{ scaleX: isActive || isComplete ? 1 : 0 }}
+                  transition={{ duration: reducedMotion ? 0 : 0.28, ease: "easeOut" }}
+                />
+                <div className="relative flex items-start gap-3">
+                  <div
+                    className={cn(
+                      "mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-full border",
+                      isActive
+                        ? "border-white/24 bg-white/12"
+                        : isComplete
+                          ? "border-black/[0.08] bg-[#171614] text-white"
+                          : "border-black/[0.08] bg-white",
+                    )}
+                  >
                     {isComplete ? (
-                      <Check className="h-3.5 w-3.5 text-white/86" strokeWidth={1.2} />
+                      <Check className="h-3.5 w-3.5 text-white" strokeWidth={1.2} />
                     ) : isActive ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-white/74" strokeWidth={1.2} />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-white/80" strokeWidth={1.2} />
                     ) : (
-                      <span className="h-2 w-2 rounded-full bg-white/22" />
+                      <span className="h-2 w-2 rounded-full bg-[#171614]/20" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium tracking-[-0.01em] text-white">{stage.label}</p>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className={cn("text-sm font-medium tracking-[-0.01em]", isActive ? "text-white" : "text-current")}>
+                        {stage.label}
+                      </p>
+                      <span className={cn("text-[11px] uppercase tracking-[0.26em]", isActive ? "text-white/46" : "text-[#8a8175]")}>
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                    </div>
                     {stage.description ? (
-                      <p className="mt-1 text-sm leading-6 text-white/54">{stage.description}</p>
+                      <p className={cn("mt-1 text-sm leading-6", isActive ? "text-white/72" : "text-[#5b544d]")}>
+                        {stage.description}
+                      </p>
                     ) : null}
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
       </div>
 
       {!step.autoAdvance && isFinished ? (
-        <Button
-          onClick={onAdvance}
-          className="h-12 w-full rounded-full bg-white text-black hover:bg-white/92"
-        >
+        <Button onClick={onAdvance} className={PRIMARY_BUTTON}>
           continue
         </Button>
       ) : null}
@@ -1048,70 +1226,105 @@ function AnalysisStep({
 function ResultStep({
   step,
   resultProfile,
+  reducedMotion,
   onAdvance,
 }: {
   step: Extract<QuizStep, { kind: "result" }>;
   resultProfile: QuizResultProfile;
+  reducedMotion: boolean;
   onAdvance: () => void;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div className="space-y-4">
-        {step.kicker ? (
-          <p className="text-[11px] uppercase tracking-[0.34em] text-white/46">{step.kicker}</p>
-        ) : null}
-        <div className="inline-flex rounded-full border border-white/10 bg-white/[0.05] px-3 py-2 text-[11px] uppercase tracking-[0.3em] text-white/68">
+        {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
+        <div className="inline-flex rounded-full border border-black/[0.08] bg-white/84 px-3 py-2 text-[11px] uppercase tracking-[0.3em] text-[#5b554d]">
           {resultProfile.badge}
         </div>
-        <h1 className="font-sans text-[2.1rem] font-semibold leading-[1.01] tracking-[-0.05em] text-white sm:text-[2.5rem]">
-          {resultProfile.headline}
-        </h1>
-        <p className="text-base leading-7 text-white/72">{resultProfile.summary}</p>
+        <h1 className={STEP_TITLE}>{resultProfile.headline}</h1>
+        <p className={STEP_BODY}>{resultProfile.summary}</p>
       </div>
 
-      <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-        <p className="text-[11px] uppercase tracking-[0.3em] text-white/40">current read</p>
-        <p className="mt-3 text-lg font-medium leading-7 tracking-[-0.03em] text-white">
+      <motion.div
+        initial={reducedMotion ? undefined : { opacity: 0, y: 16 }}
+        animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+        transition={reducedMotion ? undefined : { duration: 0.35 }}
+        className={cn(LIGHT_INSET, "p-5 sm:p-6")}
+      >
+        <p className="text-[11px] uppercase tracking-[0.3em] text-[#80786e]">current read</p>
+        <p className="mt-3 text-lg font-medium leading-7 tracking-[-0.03em] text-[#171410]">
           {resultProfile.affirmation}
         </p>
-        <p className="mt-4 text-sm leading-7 text-white/60">{resultProfile.mechanism}</p>
-      </div>
+        <p className="mt-4 text-sm leading-7 text-[#575149]">{resultProfile.mechanism}</p>
+      </motion.div>
 
-      <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+      <motion.div
+        initial={reducedMotion ? undefined : { opacity: 0, y: 18 }}
+        animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+        transition={reducedMotion ? undefined : { duration: 0.38, delay: 0.05 }}
+        className={cn(LIGHT_INSET, "p-5 sm:p-6")}
+      >
         <div className="space-y-2">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-white/40">{resultProfile.graphTitle}</p>
-          <p className="text-sm leading-6 text-white/58">{resultProfile.graphCaption}</p>
+          <p className="text-[11px] uppercase tracking-[0.3em] text-[#80786e]">{resultProfile.graphTitle}</p>
+          <p className="text-sm leading-6 text-[#5a544c]">{resultProfile.graphCaption}</p>
         </div>
         <div className="mt-5">
           <QuizResultGraph resultId={resultProfile.id} metrics={resultProfile.metrics} />
         </div>
-      </div>
+      </motion.div>
 
       <div className="grid gap-3">
-        {resultProfile.criteria.map((criterion) => (
-          <div
+        {resultProfile.criteria.map((criterion, index) => (
+          <motion.div
             key={criterion.id}
-            className="rounded-[1.5rem] border border-white/10 bg-white/[0.03] px-4 py-4"
+            initial={reducedMotion ? undefined : { opacity: 0, x: -14 }}
+            animate={reducedMotion ? undefined : { opacity: 1, x: 0 }}
+            transition={reducedMotion ? undefined : { duration: 0.28, delay: 0.06 * index }}
+            className={cn(SECONDARY_PANEL, "px-4 py-4")}
           >
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-medium tracking-[-0.01em] text-white">{criterion.label}</p>
-              <span className="text-[11px] uppercase tracking-[0.28em] text-white/42">
+              <p className="text-sm font-medium tracking-[-0.01em] text-[#171410]">{criterion.label}</p>
+              <span className="text-[11px] uppercase tracking-[0.28em] text-[#827a70]">
                 {emphasisLabel(criterion.emphasis)}
               </span>
             </div>
-            <p className="mt-2 text-sm leading-6 text-white/60">{criterion.detail}</p>
-          </div>
+            <p className="mt-2 text-sm leading-6 text-[#5c554d]">{criterion.detail}</p>
+          </motion.div>
         ))}
       </div>
 
-      <Button
-        onClick={onAdvance}
-        className="h-12 w-full rounded-full bg-white text-black hover:bg-white/92"
-      >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className={cn(LIGHT_INSET, "p-5")}>
+          <p className="text-[11px] uppercase tracking-[0.3em] text-[#80786e]">what supports this read</p>
+          <div className="mt-4 grid gap-3">
+            {resultProfile.educationBullets.map((bullet) => (
+              <div key={bullet} className="flex gap-3">
+                <div className="mt-1 h-2.5 w-2.5 flex-none rounded-full bg-[#171614]" />
+                <p className="text-sm leading-6 text-[#5b554d]">{bullet}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-[1.6rem] border border-[#171614] bg-[#171614] p-5 text-white shadow-[0_24px_50px_rgba(23,22,20,0.12)]">
+          <p className="text-[11px] uppercase tracking-[0.3em] text-white/46">keep in mind</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {resultProfile.dopamineCandies.map((candy) => (
+              <span
+                key={candy}
+                className="rounded-full border border-white/14 bg-white/8 px-3 py-2 text-xs leading-5 text-white/82"
+              >
+                {candy}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <Button onClick={onAdvance} className={PRIMARY_BUTTON}>
         {step.primaryLabel}
       </Button>
 
-      <p className="text-center text-xs leading-6 text-white/40">{step.disclaimer}</p>
+      <p className="text-center text-xs leading-6 text-[#81796e]">{step.disclaimer}</p>
     </div>
   );
 }
@@ -1132,20 +1345,14 @@ function LeadStep({
   onLeadSubmit: () => void;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div className="space-y-4">
-        {step.kicker ? (
-          <p className="text-[11px] uppercase tracking-[0.34em] text-white/46">{step.kicker}</p>
-        ) : null}
-        <h1 className="font-sans text-[2rem] font-semibold leading-[1.02] tracking-[-0.05em] text-white sm:text-[2.35rem]">
-          {step.title}
-        </h1>
-        {step.body ? (
-          <p className="text-base leading-7 text-white/66">{step.body}</p>
-        ) : null}
+        {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
+        <h1 className={STEP_TITLE}>{step.title}</h1>
+        {step.body ? <p className={STEP_BODY}>{step.body}</p> : null}
       </div>
 
-      <div className="space-y-4 rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+      <div className={cn(LIGHT_INSET, "space-y-4 p-5 sm:p-6")}>
         {step.fields.map((field) => (
           <LeadFieldInput
             key={field.id}
@@ -1155,25 +1362,22 @@ function LeadStep({
           />
         ))}
 
-        <label className="flex items-start gap-3 rounded-[1.4rem] border border-white/10 bg-black/30 px-4 py-4">
+        <label className={cn(SECONDARY_PANEL, "flex items-start gap-3 px-4 py-4")}>
           <input
             checked={consent}
             onChange={(event) => onConsentChange(event.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-white/30 bg-black text-white accent-white"
+            className="mt-1 h-4 w-4 rounded border-black/20 bg-white text-[#171614] accent-[#171614]"
             type="checkbox"
           />
-          <span className="text-sm leading-6 text-white/68">{step.consentLabel}</span>
+          <span className="text-sm leading-6 text-[#5c554d]">{step.consentLabel}</span>
         </label>
       </div>
 
-      <Button
-        onClick={onLeadSubmit}
-        className="h-12 w-full rounded-full bg-white text-black hover:bg-white/92"
-      >
+      <Button onClick={onLeadSubmit} className={PRIMARY_BUTTON}>
         {step.submitLabel}
       </Button>
 
-      <p className="text-sm leading-6 text-white/42">{step.disclaimer}</p>
+      <p className="text-sm leading-6 text-[#7e766b]">{step.disclaimer}</p>
     </div>
   );
 }
@@ -1188,51 +1392,42 @@ function OfferStep({
   onOfferClick: () => void;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div className="space-y-4">
-        {step.kicker ? (
-          <p className="text-[11px] uppercase tracking-[0.34em] text-white/46">{step.kicker}</p>
-        ) : null}
-        <h1 className="font-sans text-[2rem] font-semibold leading-[1.02] tracking-[-0.05em] text-white sm:text-[2.35rem]">
-          {step.title}
-        </h1>
-        {step.body ? (
-          <p className="text-base leading-7 text-white/66">{step.body}</p>
-        ) : null}
+        {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
+        <h1 className={STEP_TITLE}>{step.title}</h1>
+        {step.body ? <p className={STEP_BODY}>{step.body}</p> : null}
       </div>
 
-      <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-        <p className="text-[11px] uppercase tracking-[0.3em] text-white/40">why this fits</p>
-        <p className="mt-3 text-lg font-medium leading-7 tracking-[-0.03em] text-white">
+      <div className={cn(LIGHT_INSET, "p-5 sm:p-6")}>
+        <p className="text-[11px] uppercase tracking-[0.3em] text-[#80786e]">why this fits</p>
+        <p className="mt-3 text-lg font-medium leading-7 tracking-[-0.03em] text-[#171410]">
           {resultProfile.offerBridge}
         </p>
 
         <div className="mt-6 grid gap-3">
           {step.bullets.map((bullet) => (
-            <div key={bullet} className="flex gap-3 rounded-[1.3rem] border border-white/8 bg-black/30 px-4 py-4">
-              <div className="mt-1 flex h-6 w-6 flex-none items-center justify-center rounded-full border border-white/14 bg-white/[0.06]">
-                <Check className="h-3.5 w-3.5 text-white/84" strokeWidth={1.2} />
+            <div key={bullet} className={cn(SECONDARY_PANEL, "flex gap-3 px-4 py-4")}>
+              <div className="mt-1 flex h-6 w-6 flex-none items-center justify-center rounded-full border border-black/[0.08] bg-[#171614]">
+                <Check className="h-3.5 w-3.5 text-white" strokeWidth={1.2} />
               </div>
-              <p className="text-sm leading-6 text-white/72">{bullet}</p>
+              <p className="text-sm leading-6 text-[#554f47]">{bullet}</p>
             </div>
           ))}
         </div>
       </div>
 
-      <Button
-        asChild
-        className="h-12 w-full rounded-full bg-white text-black hover:bg-white/92"
-      >
+      <Button asChild className={PRIMARY_BUTTON}>
         <a href={step.ctaUrl} onClick={onOfferClick} rel="noopener noreferrer" target="_blank">
           {step.ctaLabel}
         </a>
       </Button>
 
       {step.note ? (
-        <p className="text-center text-xs uppercase tracking-[0.28em] text-white/40">{step.note}</p>
+        <p className="text-center text-xs uppercase tracking-[0.28em] text-[#857d73]">{step.note}</p>
       ) : null}
       {step.guarantee ? (
-        <p className="text-center text-sm leading-6 text-white/46">{step.guarantee}</p>
+        <p className="text-center text-sm leading-6 text-[#6b645b]">{step.guarantee}</p>
       ) : null}
     </div>
   );
@@ -1249,17 +1444,17 @@ function LeadFieldInput({
 }) {
   return (
     <div className="grid gap-2">
-      <Label className="text-[11px] uppercase tracking-[0.28em] text-white/46">{field.label}</Label>
+      <Label className="text-[11px] uppercase tracking-[0.28em] text-[#80796f]">{field.label}</Label>
       {field.type === "textarea" ? (
         <Textarea
-          className="min-h-[120px] rounded-[1.2rem] border-white/10 bg-black/30 text-white placeholder:text-white/28 focus-visible:ring-white/20"
+          className="min-h-[120px] rounded-[1.2rem] border-black/[0.08] bg-white text-[#171410] placeholder:text-[#9a9288] focus-visible:ring-black/12"
           onChange={(event) => onChange(event.target.value)}
           placeholder={field.placeholder}
           value={value}
         />
       ) : (
         <Input
-          className="h-12 rounded-[1.2rem] border-white/10 bg-black/30 text-white placeholder:text-white/28 focus-visible:ring-white/20"
+          className="h-12 rounded-[1.2rem] border-black/[0.08] bg-white text-[#171410] placeholder:text-[#9a9288] focus-visible:ring-black/12"
           onChange={(event) => onChange(event.target.value)}
           placeholder={field.placeholder}
           type={field.type}

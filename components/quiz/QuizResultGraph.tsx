@@ -30,16 +30,16 @@ export default function QuizResultGraph({
         <AreaChart data={metrics} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
           <defs>
             <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="rgba(255,255,255,0.35)" />
-              <stop offset="100%" stopColor="rgba(255,255,255,0.02)" />
+              <stop offset="0%" stopColor="rgba(23,22,20,0.22)" />
+              <stop offset="100%" stopColor="rgba(23,22,20,0.02)" />
             </linearGradient>
           </defs>
-          <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+          <CartesianGrid stroke="rgba(23,22,20,0.08)" vertical={false} />
           <XAxis
             axisLine={false}
             dataKey="label"
             dy={10}
-            tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }}
+            tick={{ fill: "rgba(23,22,20,0.55)", fontSize: 11 }}
             tickLine={false}
           />
           <YAxis axisLine={false} domain={[0, 100]} hide tickLine={false} />
@@ -47,8 +47,8 @@ export default function QuizResultGraph({
             dataKey="value"
             fill={`url(#${gradientId})`}
             fillOpacity={1}
-            stroke="#ffffff"
-            strokeWidth={1.4}
+            stroke="#171614"
+            strokeWidth={1.5}
             type="monotone"
           />
         </AreaChart>
