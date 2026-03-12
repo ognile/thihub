@@ -4,13 +4,15 @@ import FBComments from '@/components/FBComments';
 import type { CommentData } from '@/components/FBComments';
 import PixelTracker from '@/components/PixelTracker';
 import UrlPreserver from '@/components/UrlPreserver';
-import CinematicHero from '@/components/CinematicHero';
+import ArticleHero from '@/components/article/ArticleHero';
 import { StickyCTA } from '@/components/article-v2';
 import { notFound } from 'next/navigation';
 import { headers } from 'next/headers';
 import { ArticleService } from '@/lib/services/article-service';
 import { createDomainContextFromHeaders } from '@/lib/services/domain-context';
 import BlockCanvas from '@/components/article/BlockCanvas';
+import { DEFAULT_AUTHOR_IMAGE } from '@/lib/articles/schema';
+import { resolveReadTimeMinutes } from '@/lib/articles/read-time';
 import { buildQuizEntryUrl } from '@/lib/quizzes/url';
 
 async function getArticleAndDefaults(slug: string) {
@@ -73,6 +75,13 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
         source: 'article-inline-cta',
         articleSlug: slug,
     });
+    const publishableBlocks = article.contentBlocks.filter((block) => !block.hidden);
+    const readTimeMinutes = resolveReadTimeMinutes({
+        title: article.title,
+        subtitle: article.subtitle,
+        blocks: publishableBlocks,
+        heroMeta: article.heroMeta,
+    });
 
     return (
         <div className="min-h-screen bg-white pb-20 font-serif selection:bg-blue-100 selection:text-blue-900">
@@ -84,24 +93,26 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
                 <StickyCTA
                     productName="4-minute symptom profile"
                     ctaLink={quizEntryUrl}
-                    price={article.stickyCTAPrice ?? undefined}
-                    originalPrice={article.stickyCTAOriginalPrice ?? undefined}
                     ctaText="get my result"
                     enabled={true}
                 />
             ) : null}
 
-            <CinematicHero
+            <ArticleHero
                 image={article.image || 'https://picsum.photos/seed/article-hero/1600/900'}
                 title={article.title}
                 subtitle={article.subtitle || ''}
                 author={article.author || 'Top Health Insider'}
+                reviewer={article.reviewer}
                 date={article.date || ''}
-                authorImage="https://picsum.photos/seed/doc/100"
+                authorImage={article.authorImage || DEFAULT_AUTHOR_IMAGE}
+                heroMeta={article.heroMeta}
+                readTimeMinutes={readTimeMinutes}
+                mode="public"
             />
 
             <main className="px-5 max-w-[680px] mx-auto -mt-20 relative z-20 bg-white rounded-t-3xl shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] pt-10 sm:pt-12">
-                <BlockCanvas blocks={article.contentBlocks} ctaUrl={quizEntryUrl} />
+                <BlockCanvas blocks={publishableBlocks} ctaUrl={quizEntryUrl} />
 
                 <div className="font-sans border-t border-gray-200 pt-10">
                     <h3 className="text-xl font-bold text-gray-900 mb-6">Discussion</h3>

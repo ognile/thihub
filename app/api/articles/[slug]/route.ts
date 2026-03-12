@@ -1,101 +1,131 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 import { createClient } from '@/utils/supabase/server';
+import { jsonWithEtag } from '@/lib/http/etag';
+import { recordCounter } from '@/lib/observability/counters';
+import { ArticleService } from '@/lib/services/article-service';
+import { createDomainContextFromRequest } from '@/lib/services/domain-context';
+import { createDocumentFromBlocks, createPersistedArticlePayload, resolveCanonicalDocument } from '@/lib/articles/service';
+import { createDocumentFromLegacyArticle } from '@/lib/articles/backfill-parser';
+import { DEFAULT_STYLE_PRESET, heroMetaSchema, normalizeHeroMeta } from '@/lib/articles/schema';
+
+const updateBodySchema = z.object({
+    title: z.string().optional(),
+    subtitle: z.string().optional(),
+    author: z.string().optional(),
+    reviewer: z.string().optional(),
+    date: z.string().optional(),
+    image: z.string().optional(),
+    authorImage: z.string().nullable().optional(),
+    pixelId: z.string().nullable().optional(),
+    ctaUrl: z.string().nullable().optional(),
+    comments: z.unknown().optional(),
+    stickyCTAEnabled: z.boolean().nullable().optional(),
+    stickyCTAText: z.string().nullable().optional(),
+    stickyCTAPrice: z.string().nullable().optional(),
+    stickyCTAOriginalPrice: z.string().nullable().optional(),
+    stickyCTAProductName: z.string().nullable().optional(),
+    contentBlocks: z.unknown().optional(),
+    stylePreset: z.literal(DEFAULT_STYLE_PRESET).optional(),
+    heroMeta: heroMetaSchema.optional(),
+    content: z.string().optional(),
+});
 
 export async function GET(
     request: Request,
-    { params }: { params: Promise<{ slug: string }> }
+    { params }: { params: Promise<{ slug: string }> },
 ) {
     try {
         const { slug } = await params;
+        const domainContext = createDomainContextFromRequest(request);
         const supabase = await createClient();
 
-        const { data: article, error } = await supabase
-            .from('articles')
-            .select('*')
-            .eq('slug', slug)
-            .single();
+        const article = await ArticleService.getBySlug(slug, domainContext, {
+            supabase,
+        });
 
-        if (error) {
-            if (error.code === 'PGRST116') {
-                // No rows returned
-                return NextResponse.json({ error: 'Article not found' }, { status: 404 });
-            }
-            throw error;
+        if (!article) {
+            return NextResponse.json({ error: 'Article not found' }, { status: 404 });
         }
 
-        // Transform snake_case to camelCase for frontend compatibility
-        const mappedArticle = {
-            ...article,
-            ctaText: article.cta_text,
-            ctaTitle: article.cta_title,
-            ctaDescription: article.cta_description,
-            pixelId: article.pixel_id,
-            ctaUrl: article.cta_url,
-            keyTakeaways: article.key_takeaways,
-            // V2 Sticky CTA fields
-            stickyCTAEnabled: article.sticky_cta_enabled,
-            stickyCTAText: article.sticky_cta_text,
-            stickyCTAPrice: article.sticky_cta_price,
-            stickyCTAOriginalPrice: article.sticky_cta_original_price,
-            stickyCTAProductName: article.sticky_cta_product_name,
-            articleTheme: article.article_theme,
-        };
+        recordCounter('article.api.get', {
+            slug,
+            domain: domainContext.domain,
+            host: domainContext.host,
+        });
 
-        return NextResponse.json(mappedArticle);
-    } catch (e) {
-        console.error('Error fetching article:', e);
+        return jsonWithEtag(request, article);
+    } catch (error) {
+        console.error('Error fetching article:', error);
         return NextResponse.json({ error: 'Failed to fetch article' }, { status: 500 });
     }
 }
 
 export async function PUT(
     request: Request,
-    { params }: { params: Promise<{ slug: string }> }
+    { params }: { params: Promise<{ slug: string }> },
 ) {
     try {
         const { slug } = await params;
         const supabase = await createClient();
 
-        // Check authentication
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-            }
+        }
 
-        const body = await request.json();
+        const payload = updateBodySchema.parse(await request.json());
 
-        // Transform camelCase to snake_case for database
+        const { data: existingArticle, error: existingError } = await supabase
+            .from('articles')
+            .select('content_blocks,content_schema_version,style_preset,content,hero_meta')
+            .eq('slug', slug)
+            .single();
+
+        if (existingError) {
+            throw existingError;
+        }
+
+        const canonicalDocument = payload.contentBlocks !== undefined
+            ? createDocumentFromBlocks(payload.contentBlocks, payload.stylePreset)
+            : payload.content !== undefined
+                ? createDocumentFromLegacyArticle({ content: payload.content })
+                : resolveCanonicalDocument({
+                    contentBlocks: existingArticle.content_blocks,
+                    contentSchemaVersion: existingArticle.content_schema_version,
+                    stylePreset: existingArticle.style_preset,
+                    content: existingArticle.content,
+                });
+
+        const persistedContent = createPersistedArticlePayload(canonicalDocument);
+
         const updateData: Record<string, unknown> = {
-            title: body.title,
-            subtitle: body.subtitle,
-            content: body.content,
-            author: body.author,
-            reviewer: body.reviewer,
-            date: body.date,
-            image: body.image,
-            cta_text: body.ctaText,
-            cta_title: body.ctaTitle,
-            cta_description: body.ctaDescription,
-            pixel_id: body.pixelId,
-            cta_url: body.ctaUrl,
-            key_takeaways: body.keyTakeaways,
-            comments: body.comments,
-            // V2 Sticky CTA fields
-            sticky_cta_enabled: body.stickyCTAEnabled,
-            sticky_cta_text: body.stickyCTAText,
-            sticky_cta_price: body.stickyCTAPrice,
-            sticky_cta_original_price: body.stickyCTAOriginalPrice,
-            sticky_cta_product_name: body.stickyCTAProductName,
-            article_theme: body.articleTheme,
             updated_at: new Date().toISOString(),
+            ...persistedContent,
         };
 
-        // Remove undefined values
-        Object.keys(updateData).forEach(key => {
-            if (updateData[key] === undefined) {
-                delete updateData[key];
-            }
-        });
+        if (payload.title !== undefined) updateData.title = payload.title;
+        if (payload.subtitle !== undefined) updateData.subtitle = payload.subtitle;
+        if (payload.author !== undefined) updateData.author = payload.author;
+        if (payload.reviewer !== undefined) updateData.reviewer = payload.reviewer;
+        if (payload.date !== undefined) updateData.date = payload.date;
+        if (payload.image !== undefined) updateData.image = payload.image;
+        if (payload.authorImage !== undefined) updateData.author_image = payload.authorImage;
+        if (payload.pixelId !== undefined) updateData.pixel_id = payload.pixelId ?? '';
+        if (payload.ctaUrl !== undefined) updateData.cta_url = payload.ctaUrl ?? '';
+        if (payload.comments !== undefined) updateData.comments = payload.comments;
+        if (payload.stickyCTAEnabled !== undefined) updateData.sticky_cta_enabled = payload.stickyCTAEnabled ?? false;
+        if (payload.stickyCTAText !== undefined) updateData.sticky_cta_text = payload.stickyCTAText ?? '';
+        if (payload.stickyCTAPrice !== undefined) updateData.sticky_cta_price = payload.stickyCTAPrice ?? '';
+        if (payload.stickyCTAOriginalPrice !== undefined) updateData.sticky_cta_original_price = payload.stickyCTAOriginalPrice ?? '';
+        if (payload.stickyCTAProductName !== undefined) updateData.sticky_cta_product_name = payload.stickyCTAProductName ?? '';
+        if (payload.heroMeta !== undefined) {
+            updateData.hero_meta = normalizeHeroMeta(payload.heroMeta);
+        }
 
         const { data: article, error } = await supabase
             .from('articles')
@@ -108,26 +138,43 @@ export async function PUT(
             throw error;
         }
 
+        revalidatePath(`/articles/${slug}`);
+
         return NextResponse.json({ success: true, article });
-    } catch (e) {
-        console.error('Error updating article:', e);
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return NextResponse.json(
+                {
+                    error: 'Invalid article payload',
+                    details: error.issues.map((issue) => ({
+                        path: issue.path.join('.'),
+                        message: issue.message,
+                    })),
+                },
+                { status: 422 },
+            );
+        }
+
+        console.error('Error updating article:', error);
         return NextResponse.json({ error: 'Failed to update article' }, { status: 500 });
     }
 }
 
 export async function DELETE(
-    request: Request,
-    { params }: { params: Promise<{ slug: string }> }
+    _request: Request,
+    { params }: { params: Promise<{ slug: string }> },
 ) {
     try {
         const { slug } = await params;
         const supabase = await createClient();
 
-        // Check authentication
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+        }
 
         const { error } = await supabase
             .from('articles')
@@ -138,9 +185,12 @@ export async function DELETE(
             throw error;
         }
 
+        revalidatePath('/admin');
+        revalidatePath(`/articles/${slug}`);
+
         return NextResponse.json({ success: true });
-    } catch (e) {
-        console.error('Error deleting article:', e);
+    } catch (error) {
+        console.error('Error deleting article:', error);
         return NextResponse.json({ error: 'Failed to delete article' }, { status: 500 });
     }
 }
