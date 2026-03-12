@@ -2,9 +2,11 @@
 
 import dynamic from "next/dynamic";
 import {
+  type ReactNode,
   startTransition,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -12,6 +14,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
   Check,
+  ChevronDown,
   ChevronLeft,
   Loader2,
   Sparkles,
@@ -53,18 +56,20 @@ const LIGHT_INSET =
   "rounded-[1.6rem] border border-black/[0.08] bg-white/82 shadow-[0_14px_48px_rgba(28,24,17,0.06)]";
 const SECONDARY_PANEL =
   "rounded-[1.45rem] border border-black/[0.07] bg-[#f1ede4]/84 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]";
+const PREMIUM_PANEL =
+  "rounded-[1.8rem] border border-[#171614] bg-[#171614] text-white shadow-[0_24px_52px_rgba(23,22,20,0.16)]";
 const STEP_LABEL =
   "text-[11px] uppercase tracking-[0.34em] text-[#7b746a]";
 const STEP_TITLE =
-  "font-sans text-[2.12rem] font-semibold leading-[0.96] tracking-[-0.065em] text-[#15130f] sm:text-[2.55rem]";
-const STEP_BODY = "text-[15px] leading-7 text-[#5a544c]";
+  "font-sans text-[1.95rem] font-semibold leading-[0.98] tracking-[-0.06em] text-[#15130f] sm:text-[2.45rem]";
+const STEP_BODY = "text-[14px] leading-6 text-[#5a544c] sm:text-[15px] sm:leading-7";
 const PRIMARY_BUTTON =
   "h-12 w-full rounded-full border border-[#171614] bg-[#171614] text-white shadow-[0_18px_38px_rgba(23,22,20,0.14)] transition duration-300 hover:-translate-y-0.5 hover:bg-black disabled:pointer-events-none disabled:opacity-45";
 const OPTION_IDLE =
   "border-black/[0.08] bg-white/88 text-[#171410] shadow-[0_14px_34px_rgba(24,20,12,0.05)] hover:-translate-y-0.5 hover:border-black/[0.14] hover:shadow-[0_22px_50px_rgba(24,20,12,0.08)]";
 const OPTION_ACTIVE =
   "border-[#171614] bg-[#171614] text-white shadow-[0_24px_52px_rgba(23,22,20,0.16)]";
-const ANALYSIS_BAR_LAYOUT = [0.34, 0.52, 0.74, 0.48, 0.82, 0.58, 0.9, 0.42];
+const ANALYSIS_BAR_LAYOUT = [0.42, 0.68, 0.94, 0.58, 0.8];
 
 interface QuizExperienceProps {
   quizId: string;
@@ -136,6 +141,84 @@ function resolvedSelectedOptionsForStep(
   }
 
   return snapshot?.answers.find((answer) => answer.stepId === stepId)?.optionIds ?? [];
+}
+
+interface AdaptiveSelectionSummary {
+  stepId: string;
+  stepTitle: string;
+  optionLabel: string;
+}
+
+interface AdaptiveSignalSummary {
+  leadingBadge: string;
+  leadingLabel: string;
+  recentSelection: AdaptiveSelectionSummary | null;
+  recentSelections: AdaptiveSelectionSummary[];
+}
+
+function getQuestionStep(definition: QuizDefinition, stepId: string) {
+  return definition.steps.find(
+    (candidate): candidate is Extract<QuizStep, { kind: "question" }> =>
+      candidate.id === stepId && candidate.kind === "question",
+  );
+}
+
+function buildAdaptiveSignal(
+  definition: QuizDefinition,
+  answers: QuizSessionSnapshot["answers"],
+  resultProfile: QuizResultProfile,
+): AdaptiveSignalSummary {
+  const recentSelections = answers
+    .slice(-3)
+    .reverse()
+    .flatMap((answer) => {
+      const step = getQuestionStep(definition, answer.stepId);
+      if (!step) {
+        return [];
+      }
+
+      const optionLabel = answer.optionIds
+        .map((optionId) => step.options.find((candidate) => candidate.id === optionId)?.label ?? null)
+        .filter((value): value is string => Boolean(value))
+        .join(", ");
+
+      if (!optionLabel) {
+        return [];
+      }
+
+      return [{
+        stepId: step.id,
+        stepTitle: step.title,
+        optionLabel,
+      }];
+    });
+
+  return {
+    leadingBadge: resultProfile.badge,
+    leadingLabel: resultProfile.label,
+    recentSelection: recentSelections[0] ?? null,
+    recentSelections,
+  };
+}
+
+function isLeadStepReady(
+  step: Extract<QuizStep, { kind: "lead" }>,
+  leadValues: Record<string, string>,
+  consent: boolean,
+) {
+  const hasRequiredFields = step.fields.every(
+    (field) => !field.required || normalizeFieldValue(leadValues, field.id).trim().length > 0,
+  );
+
+  if (!hasRequiredFields) {
+    return false;
+  }
+
+  return !step.requireConsent || consent;
+}
+
+function inlineActionVisibilityClass(mobileRailActive: boolean) {
+  return mobileRailActive ? "hidden sm:flex" : "flex";
 }
 
 export default function QuizExperience({
@@ -255,14 +338,19 @@ export default function QuizExperience({
 
     lastViewedRef.current = marker;
 
-    void sendEvent({
-      sessionToken: snapshot.sessionToken,
-      eventType: "step_viewed",
-      stepId: currentStep.id,
-      source: entrySource,
-      articleSlug,
-      landingPath: window.location.pathname + window.location.search,
-    });
+    const isInitialLandingStep =
+      snapshot.trail.length === 1 && currentStep.id === quiz.steps[0]?.id;
+
+    if (!isInitialLandingStep) {
+      void sendEvent({
+        sessionToken: snapshot.sessionToken,
+        eventType: "step_viewed",
+        stepId: currentStep.id,
+        source: entrySource,
+        articleSlug,
+        landingPath: window.location.pathname + window.location.search,
+      });
+    }
 
     if (currentStep.kind === "result") {
       void sendEvent({
@@ -281,7 +369,7 @@ export default function QuizExperience({
         stepId: currentStep.id,
       });
     }
-  }, [articleSlug, currentStep, entrySource, isLive, resultProfile.id, sendEvent, snapshot]);
+  }, [articleSlug, currentStep, entrySource, isLive, quiz.steps, resultProfile.id, sendEvent, snapshot]);
 
   const resetDraftState = useCallback(() => {
     if (pendingAdvanceTimerRef.current) {
@@ -309,9 +397,12 @@ export default function QuizExperience({
     (nextSnapshot: QuizSessionSnapshot) => {
       persistSnapshot(nextSnapshot);
       resetDraftState();
+      if (!embedded) {
+        window.scrollTo({ top: 0, behavior: "auto" });
+      }
       startTransition(() => setSnapshot(nextSnapshot));
     },
-    [persistSnapshot, resetDraftState],
+    [embedded, persistSnapshot, resetDraftState],
   );
 
   const handleAdvance = useCallback(() => {
@@ -367,7 +458,7 @@ export default function QuizExperience({
       pendingAdvanceTimerRef.current = setTimeout(() => {
         pendingAdvanceTimerRef.current = null;
         submitSelection();
-      }, 380);
+      }, 240);
     },
     [currentStep, moveToSnapshot, pendingOptionId, quiz, reducedMotion, sendEvent, snapshot],
   );
@@ -539,10 +630,16 @@ export default function QuizExperience({
   const resolvedSelectedOptions = draftMatchesCurrentStep ? selectedOptions : savedSelectedOptions;
   const resolvedLeadValues = draftMatchesCurrentStep ? leadValues : savedLeadValues;
   const resolvedConsent = draftMatchesCurrentStep ? consent : savedConsent;
-  const resolvedSubmissionError = draftMatchesCurrentStep ? submissionError : null;
+  const resolvedSubmissionError = submissionError;
+  const adaptiveSignal = buildAdaptiveSignal(quiz, snapshot?.answers ?? [], resultProfile);
+  const leadStepReady =
+    currentStep?.kind === "lead"
+      ? isLeadStepReady(currentStep, resolvedLeadValues, resolvedConsent)
+      : false;
   const sourceLabel = entrySource.replace(/-/g, " ");
   const visibleProgress = Math.max(progress.percent, 6);
   const progressIndicatorLeft = Math.min(Math.max(visibleProgress, 6), 97);
+  const mobileRailActive = !embedded && ["welcome", "message", "result", "lead", "offer"].includes(currentStep?.kind ?? "");
 
   const stageMotion = reducedMotion
     ? { initial: { opacity: 1 }, animate: { opacity: 1 }, exit: { opacity: 1 } }
@@ -557,15 +654,15 @@ export default function QuizExperience({
       <div
         data-quiz-shell="monochrome"
         className={cn(
-          embedded ? `min-h-full ${LIGHT_SHELL}` : `min-h-screen ${LIGHT_SHELL}`,
+          embedded ? `min-h-full overflow-x-hidden ${LIGHT_SHELL}` : `min-h-screen overflow-x-hidden ${LIGHT_SHELL}`,
           className,
         )}
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.92),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(17,17,17,0.08),transparent_28%),linear-gradient(180deg,#faf8f2_0%,#ebe5da_100%)]" />
         <div
           className={cn(
-            "mx-auto flex max-w-[1160px] items-center justify-center px-4 py-6 sm:px-6",
-            embedded ? "min-h-[860px]" : "min-h-screen",
+            "mx-auto flex max-w-[1160px] items-start justify-center px-4 py-6 sm:px-6",
+            embedded ? "min-h-full" : "min-h-screen sm:items-center",
           )}
         >
           <Loader2 className="h-8 w-8 animate-spin text-black/42" strokeWidth={1.2} />
@@ -578,7 +675,7 @@ export default function QuizExperience({
     <div
       data-quiz-shell="monochrome"
       className={cn(
-        embedded ? `min-h-full overflow-hidden ${LIGHT_SHELL}` : `min-h-screen overflow-hidden ${LIGHT_SHELL}`,
+        embedded ? `min-h-full overflow-x-hidden ${LIGHT_SHELL}` : `min-h-screen overflow-x-hidden ${LIGHT_SHELL}`,
         className,
       )}
     >
@@ -592,8 +689,8 @@ export default function QuizExperience({
       />
       <div
         className={cn(
-          "relative mx-auto flex w-full max-w-[1160px] items-center justify-center px-4 py-6 sm:px-6 lg:px-10",
-          embedded ? "min-h-[920px]" : "min-h-screen",
+          "relative mx-auto flex w-full max-w-[1160px] items-start justify-center px-4 pb-6 pt-4 sm:px-6 sm:py-6 lg:px-10",
+          embedded ? "min-h-full" : "min-h-screen sm:items-center",
         )}
       >
         <div className="w-full max-w-[446px]">
@@ -657,14 +754,19 @@ export default function QuizExperience({
                   }}
                 />
               </div>
-            </div>
+              </div>
 
-            <div className="relative min-h-[710px] px-5 py-6 sm:px-6 sm:py-7">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={`${currentStep.id}:${snapshot.trail.length}`}
-                  initial={stageMotion.initial}
-                  animate={stageMotion.animate}
+              <div
+                className={cn(
+                  "relative px-5 pt-5 sm:min-h-[620px] sm:px-6 sm:pt-7",
+                  mobileRailActive ? "pb-[7.75rem] sm:pb-7" : "pb-6 sm:pb-7",
+                )}
+              >
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={`${currentStep.id}:${snapshot.trail.length}`}
+                    initial={stageMotion.initial}
+                    animate={stageMotion.animate}
                   exit={stageMotion.exit}
                   transition={{ duration: reducedMotion ? 0 : 0.58, ease: [0.19, 1, 0.22, 1] }}
                 >
@@ -672,12 +774,15 @@ export default function QuizExperience({
                     currentStep={currentStep}
                     quiz={quiz}
                     resultProfile={resultProfile}
+                    adaptiveSignal={adaptiveSignal}
                     selectedOptions={resolvedSelectedOptions}
                     pendingOptionId={pendingOptionId}
                     leadValues={resolvedLeadValues}
                     consent={resolvedConsent}
                     submissionError={resolvedSubmissionError}
                     reducedMotion={Boolean(reducedMotion)}
+                    mobileRailActive={mobileRailActive}
+                    leadStepReady={leadStepReady}
                     onAdvance={handleAdvance}
                     onSingleSelect={handleSingleSelect}
                     onToggleOption={handleToggleOption}
@@ -693,6 +798,60 @@ export default function QuizExperience({
           </motion.div>
         </div>
       </div>
+      {mobileRailActive && currentStep ? (
+        <>
+          {currentStep.kind === "welcome" ? (
+            <MobileActionRail
+              kind="button"
+              label={currentStep.primaryLabel}
+              caption={currentStep.secondaryLabel ?? currentStep.kicker}
+              onClick={handleAdvance}
+            />
+          ) : null}
+          {currentStep.kind === "message" ? (
+            <MobileActionRail
+              kind="button"
+              label={currentStep.primaryLabel}
+              caption={
+                adaptiveSignal.recentSelection
+                  ? `current read: ${adaptiveSignal.leadingBadge}`
+                  : currentStep.secondaryLabel ?? "keep the momentum"
+              }
+              onClick={handleAdvance}
+            />
+          ) : null}
+          {currentStep.kind === "result" ? (
+            <MobileActionRail
+              kind="button"
+              label={currentStep.primaryLabel}
+              caption={`current read: ${resultProfile.badge}`}
+              onClick={handleAdvance}
+            />
+          ) : null}
+          {currentStep.kind === "lead" ? (
+            <MobileActionRail
+              kind="button"
+              label={currentStep.submitLabel}
+              caption={
+                leadStepReady
+                  ? "send the result while this is fresh"
+                  : "enter your details to continue"
+              }
+              disabled={!leadStepReady}
+              onClick={handleLeadSubmit}
+            />
+          ) : null}
+          {currentStep.kind === "offer" ? (
+            <MobileActionRail
+              kind="link"
+              label={currentStep.ctaLabel}
+              caption={currentStep.note ?? resultProfile.badge}
+              href={currentStep.ctaUrl}
+              onClick={handleOfferClick}
+            />
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }
@@ -701,12 +860,15 @@ function StepSurface({
   currentStep,
   quiz,
   resultProfile,
+  adaptiveSignal,
   selectedOptions,
   pendingOptionId,
   leadValues,
   consent,
   submissionError,
   reducedMotion,
+  mobileRailActive,
+  leadStepReady,
   onAdvance,
   onSingleSelect,
   onToggleOption,
@@ -719,12 +881,15 @@ function StepSurface({
   currentStep: QuizStep;
   quiz: QuizDefinition;
   resultProfile: QuizResultProfile;
+  adaptiveSignal: AdaptiveSignalSummary;
   selectedOptions: string[];
   pendingOptionId: string | null;
   leadValues: Record<string, string>;
   consent: boolean;
   submissionError: string | null;
   reducedMotion: boolean;
+  mobileRailActive: boolean;
+  leadStepReady: boolean;
   onAdvance: () => void;
   onSingleSelect: (optionId: string) => void;
   onToggleOption: (optionId: string) => void;
@@ -735,9 +900,14 @@ function StepSurface({
   onOfferClick: () => void;
 }) {
   return (
-    <div className="space-y-7">
+    <div className="space-y-6">
       {currentStep.kind === "welcome" ? (
-        <WelcomeStep step={currentStep} reducedMotion={reducedMotion} onAdvance={onAdvance} />
+        <WelcomeStep
+          step={currentStep}
+          reducedMotion={reducedMotion}
+          mobileRailActive={mobileRailActive}
+          onAdvance={onAdvance}
+        />
       ) : null}
 
       {currentStep.kind === "question" ? (
@@ -753,7 +923,13 @@ function StepSurface({
       ) : null}
 
       {currentStep.kind === "message" ? (
-        <MessageStep step={currentStep} reducedMotion={reducedMotion} onAdvance={onAdvance} />
+        <MessageStep
+          step={currentStep}
+          adaptiveSignal={adaptiveSignal}
+          reducedMotion={reducedMotion}
+          mobileRailActive={mobileRailActive}
+          onAdvance={onAdvance}
+        />
       ) : null}
 
       {currentStep.kind === "analysis" ? (
@@ -764,7 +940,9 @@ function StepSurface({
         <ResultStep
           step={currentStep}
           resultProfile={resultProfile}
+          adaptiveSignal={adaptiveSignal}
           reducedMotion={reducedMotion}
+          mobileRailActive={mobileRailActive}
           onAdvance={onAdvance}
         />
       ) : null}
@@ -772,8 +950,12 @@ function StepSurface({
       {currentStep.kind === "lead" ? (
         <LeadStep
           step={currentStep}
+          resultProfile={resultProfile}
+          adaptiveSignal={adaptiveSignal}
           leadValues={leadValues}
           consent={consent}
+          isReady={leadStepReady}
+          mobileRailActive={mobileRailActive}
           onLeadFieldChange={onLeadFieldChange}
           onConsentChange={onConsentChange}
           onLeadSubmit={onLeadSubmit}
@@ -781,7 +963,12 @@ function StepSurface({
       ) : null}
 
       {currentStep.kind === "offer" ? (
-        <OfferStep step={currentStep} resultProfile={resultProfile} onOfferClick={onOfferClick} />
+        <OfferStep
+          step={currentStep}
+          resultProfile={resultProfile}
+          mobileRailActive={mobileRailActive}
+          onOfferClick={onOfferClick}
+        />
       ) : null}
 
       {submissionError ? (
@@ -801,35 +988,44 @@ function StepSurface({
 function WelcomeStep({
   step,
   reducedMotion,
+  mobileRailActive,
   onAdvance,
 }: {
   step: Extract<QuizStep, { kind: "welcome" }>;
   reducedMotion: boolean;
+  mobileRailActive: boolean;
   onAdvance: () => void;
 }) {
   return (
-    <div className="space-y-7">
-      <div className="space-y-5">
+    <div className="space-y-5">
+      <div className="space-y-4">
         {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
         <h1 className={STEP_TITLE}>{step.title}</h1>
         {step.body ? <p className={cn(STEP_BODY, "max-w-[32rem]")}>{step.body}</p> : null}
       </div>
 
-      <div className="grid gap-3">
+      <div className="grid gap-2.5 sm:gap-3">
         {step.trustPoints.map((point, index) => (
           <motion.div
             key={point}
             initial={reducedMotion ? undefined : { opacity: 0, y: 16 }}
             animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
             transition={reducedMotion ? undefined : { duration: 0.32, delay: 0.08 * index }}
-            className={cn(LIGHT_INSET, "flex items-center gap-3 px-4 py-4")}
+            className={cn(SECONDARY_PANEL, "flex items-center gap-3 px-4 py-3")}
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-full border border-black/[0.08] bg-[#171614] text-white">
               <Check className="h-4 w-4" strokeWidth={1.2} />
             </div>
-            <p className="text-sm leading-6 text-[#3f3a33]">{point}</p>
+            <p className="text-sm leading-5 text-[#3f3a33]">{point}</p>
           </motion.div>
         ))}
+      </div>
+
+      <div className={cn(PREMIUM_PANEL, "space-y-2 px-4 py-4 sm:px-5")}>
+        <p className="text-[11px] uppercase tracking-[0.3em] text-white/48">what happens next</p>
+        <p className="text-base font-medium leading-6 tracking-[-0.03em] text-white">
+          {step.secondaryLabel ?? "quick questions first, then a sharp result with a clear next move."}
+        </p>
       </div>
 
       <motion.button
@@ -837,7 +1033,10 @@ function WelcomeStep({
         onClick={onAdvance}
         whileTap={reducedMotion ? undefined : { scale: 0.992 }}
         whileHover={reducedMotion ? undefined : { y: -2 }}
-        className="group relative flex w-full items-center justify-between overflow-hidden rounded-[1.75rem] border border-[#171614] bg-[#171614] px-5 py-5 text-left text-white shadow-[0_24px_50px_rgba(23,22,20,0.16)]"
+        className={cn(
+          "group relative w-full items-center justify-between overflow-hidden rounded-[1.75rem] border border-[#171614] bg-[#171614] px-5 py-5 text-left text-white shadow-[0_24px_50px_rgba(23,22,20,0.16)]",
+          inlineActionVisibilityClass(mobileRailActive),
+        )}
       >
         <motion.div
           aria-hidden="true"
@@ -878,14 +1077,25 @@ function QuestionStep({
   const interactionLocked = step.selection === "single" && pendingOptionId !== null;
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-5">
       <div className="space-y-4">
         {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
         <h1 className={STEP_TITLE}>{step.title}</h1>
         {step.body ? <p className={STEP_BODY}>{step.body}</p> : null}
       </div>
 
-      <div className="grid gap-3">
+      {pendingOptionId ? (
+        <motion.div
+          initial={reducedMotion ? undefined : { opacity: 0, y: 8 }}
+          animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+          className="inline-flex w-fit items-center gap-2 rounded-full border border-black/[0.08] bg-white px-3 py-2 text-[11px] uppercase tracking-[0.28em] text-[#61594f]"
+        >
+          <Check className="h-3.5 w-3.5" strokeWidth={1.6} />
+          locked in
+        </motion.div>
+      ) : null}
+
+      <div className="grid gap-2.5 sm:gap-3">
         {step.options.map((option, index) => {
           const isSelected = selectedOptions.includes(option.id) || pendingOptionId === option.id;
           const action = step.selection === "single"
@@ -904,7 +1114,7 @@ function QuestionStep({
               whileTap={interactionLocked ? undefined : { scale: 0.988 }}
               whileHover={interactionLocked ? undefined : { y: -2 }}
               className={cn(
-                "group relative w-full overflow-hidden rounded-[1.55rem] border px-4 py-4 text-left transition duration-300 sm:px-5",
+                "group relative w-full overflow-hidden rounded-[1.55rem] border px-4 py-3.5 text-left transition duration-300 sm:px-5 sm:py-4",
                 isSelected ? OPTION_ACTIVE : OPTION_IDLE,
                 interactionLocked && !isSelected ? "opacity-60" : "",
               )}
@@ -935,15 +1145,15 @@ function QuestionStep({
                 </div>
                 <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex items-center justify-between gap-3">
-                    <p className={cn("text-lg font-medium tracking-[-0.02em]", isSelected ? "text-white" : "text-[#171410]")}>
+                    <p className={cn("text-base font-medium leading-6 tracking-[-0.02em] sm:text-lg", isSelected ? "text-white" : "text-[#171410]")}>
                       {option.label}
                     </p>
-                    <span className={cn("text-xs uppercase tracking-[0.28em]", isSelected ? "text-white/54" : "text-[#8c8377]")}>
-                      {String(index + 1).padStart(2, "0")}
+                    <span className={cn("text-[10px] uppercase tracking-[0.28em] sm:text-xs", isSelected ? "text-white/54" : "text-[#8c8377]")}>
+                      {pendingOptionId === option.id ? "locked" : String(index + 1).padStart(2, "0")}
                     </span>
                   </div>
                   {option.description ? (
-                    <p className={cn("text-sm leading-6", isSelected ? "text-white/74" : "text-[#5d564d]")}>
+                    <p className={cn("text-[13px] leading-5 sm:text-sm sm:leading-6", isSelected ? "text-white/74" : "text-[#5d564d]")}>
                       {option.description}
                     </p>
                   ) : null}
@@ -965,7 +1175,7 @@ function QuestionStep({
         </Button>
       ) : (
         <p className="text-center text-xs uppercase tracking-[0.28em] text-[#8b8377]">
-          {pendingOptionId ? "locking your answer" : "tap once to lock and continue"}
+          {pendingOptionId ? "moving to the next step" : "tap once to lock and continue"}
         </p>
       )}
     </div>
@@ -974,67 +1184,86 @@ function QuestionStep({
 
 function MessageStep({
   step,
+  adaptiveSignal,
   reducedMotion,
+  mobileRailActive,
   onAdvance,
 }: {
   step: Extract<QuizStep, { kind: "message" }>;
+  adaptiveSignal: AdaptiveSignalSummary;
   reducedMotion: boolean;
+  mobileRailActive: boolean;
   onAdvance: () => void;
 }) {
+  const primaryHighlight = step.highlights?.[0] ?? null;
+  const supportingBullets = step.bullets?.slice(0, 2) ?? [];
+  const extraBullets = step.bullets?.slice(2) ?? [];
+
   return (
-    <div className="space-y-7">
-      <div className={cn(LIGHT_INSET, "overflow-hidden p-5 sm:p-6")}>
-        <div className="space-y-5">
-          {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
-          <h1 className={STEP_TITLE}>{step.title}</h1>
-          {step.body ? <p className={STEP_BODY}>{step.body}</p> : null}
-        </div>
-
-        {step.highlights?.length ? (
-          <div className="mt-6 grid gap-3">
-            {step.highlights.map((highlight, index) => (
-              <motion.div
-                key={highlight.id}
-                initial={reducedMotion ? undefined : { opacity: 0, y: 18 }}
-                animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
-                transition={reducedMotion ? undefined : { duration: 0.34, delay: 0.09 * index }}
-                className="rounded-[1.55rem] border border-[#171614] bg-[#171614] px-4 py-4 text-white shadow-[0_24px_52px_rgba(23,22,20,0.12)]"
-              >
-                <p className="text-[11px] uppercase tracking-[0.3em] text-white/44">{highlight.label}</p>
-                <p className="mt-3 text-lg font-medium leading-7 tracking-[-0.03em] text-white">
-                  {highlight.value}
-                </p>
-              </motion.div>
-            ))}
-          </div>
-        ) : null}
-
-        {step.bullets?.length ? (
-          <div className="mt-6 grid gap-3">
-            {step.bullets.map((bullet, index) => (
-              <motion.div
-                key={bullet}
-                initial={reducedMotion ? undefined : { opacity: 0, x: -14 }}
-                animate={reducedMotion ? undefined : { opacity: 1, x: 0 }}
-                transition={reducedMotion ? undefined : { duration: 0.28, delay: 0.07 * index }}
-                className={cn(SECONDARY_PANEL, "flex gap-3 px-4 py-4")}
-              >
-                <div className="mt-1 flex h-6 w-6 flex-none items-center justify-center rounded-full border border-black/[0.08] bg-white">
-                  <Check className="h-3.5 w-3.5 text-[#171614]" strokeWidth={1.2} />
-                </div>
-                <p className="text-sm leading-6 text-[#514a43]">{bullet}</p>
-              </motion.div>
-            ))}
-          </div>
-        ) : null}
+    <div className="space-y-5">
+      <div className="space-y-4">
+        {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
+        <h1 className={STEP_TITLE}>{step.title}</h1>
+        {step.body ? <p className={STEP_BODY}>{step.body}</p> : null}
       </div>
 
-      <Button onClick={onAdvance} className={PRIMARY_BUTTON}>
+      <AdaptiveCueCard adaptiveSignal={adaptiveSignal} eyebrow="signal taking shape" />
+
+      {primaryHighlight ? (
+        <motion.div
+          initial={reducedMotion ? undefined : { opacity: 0, y: 18 }}
+          animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+          transition={reducedMotion ? undefined : { duration: 0.34 }}
+          className={cn(PREMIUM_PANEL, "space-y-3 px-4 py-4 sm:px-5")}
+        >
+          <p className="text-[11px] uppercase tracking-[0.3em] text-white/44">{primaryHighlight.label}</p>
+          <p className="text-lg font-medium leading-7 tracking-[-0.03em] text-white">
+            {primaryHighlight.value}
+          </p>
+        </motion.div>
+      ) : null}
+
+      {supportingBullets.length > 0 ? (
+        <div className="grid gap-2">
+          {supportingBullets.map((bullet, index) => (
+            <motion.div
+              key={bullet}
+              initial={reducedMotion ? undefined : { opacity: 0, x: -14 }}
+              animate={reducedMotion ? undefined : { opacity: 1, x: 0 }}
+              transition={reducedMotion ? undefined : { duration: 0.28, delay: 0.07 * index }}
+              className={cn(SECONDARY_PANEL, "flex gap-3 px-4 py-3")}
+            >
+              <div className="mt-1 flex h-6 w-6 flex-none items-center justify-center rounded-full border border-black/[0.08] bg-white">
+                <Check className="h-3.5 w-3.5 text-[#171614]" strokeWidth={1.2} />
+              </div>
+              <p className="text-sm leading-5 text-[#514a43]">{bullet}</p>
+            </motion.div>
+          ))}
+        </div>
+      ) : null}
+
+      {extraBullets.length > 0 ? (
+        <ExpandablePanel eyebrow="more context" title="open the full insight">
+          <div className="grid gap-3">
+            {extraBullets.map((bullet) => (
+              <div key={bullet} className="flex gap-3">
+                <div className="mt-1 h-2.5 w-2.5 flex-none rounded-full bg-[#171614]" />
+                <p className="text-sm leading-6 text-[#565048]">{bullet}</p>
+              </div>
+            ))}
+          </div>
+        </ExpandablePanel>
+      ) : null}
+
+      <Button
+        onClick={onAdvance}
+        className={cn(PRIMARY_BUTTON, inlineActionVisibilityClass(mobileRailActive))}
+      >
         {step.primaryLabel}
       </Button>
 
       {step.secondaryLabel ? (
-        <p className="text-center text-xs uppercase tracking-[0.28em] text-[#8d857b]">{step.secondaryLabel}</p>
+        <p className="hidden text-center text-xs uppercase tracking-[0.28em] text-[#8d857b] sm:block">{step.secondaryLabel}</p>
       ) : null}
     </div>
   );
@@ -1054,24 +1283,35 @@ function AnalysisStep({
   const [isFinished, setIsFinished] = useState(false);
   const stageCount = step.stages.length;
   const activeStage = step.stages[Math.min(activeStageIndex, stageCount - 1)];
-  const cumulativeDurations: number[] = [];
-  let durationCursor = 0;
-  step.stages.forEach((stage) => {
-    durationCursor += stage.durationMs;
-    cumulativeDurations.push(durationCursor);
-  });
+  const stageDurations = useMemo(() => {
+    const originalTotalDuration = step.stages.reduce((total, stage) => total + stage.durationMs, 0) || 1;
+    const compressedTotalDuration = reducedMotion
+      ? stageCount * 60
+      : Math.min(2200, Math.max(1600, stageCount * 320));
+
+    return step.stages.map((stage) =>
+      Math.max(
+        reducedMotion ? 60 : 140,
+        Math.round((stage.durationMs / originalTotalDuration) * compressedTotalDuration),
+      ),
+    );
+  }, [reducedMotion, stageCount, step.stages]);
+  const cumulativeDurations = useMemo(() => {
+    const values: number[] = [];
+    let durationCursor = 0;
+    stageDurations.forEach((durationMs) => {
+      durationCursor += durationMs;
+      values.push(durationCursor);
+    });
+    return values;
+  }, [stageDurations]);
   const totalDurationMs = cumulativeDurations.at(-1) ?? 1;
   const activeStageStartMs = activeStageIndex === 0 ? 0 : (cumulativeDurations[activeStageIndex - 1] ?? 0);
   const activeStageEndMs = cumulativeDurations[activeStageIndex] ?? totalDurationMs;
-  const activeStageDurationMs = activeStage?.durationMs ?? 0;
-  const completedCount = isFinished ? stageCount : completedStageIds.length;
+  const activeStageDurationMs = stageDurations[activeStageIndex] ?? 0;
   const progressStartPercent = (activeStageStartMs / totalDurationMs) * 100;
   const progressEndPercent = isFinished ? 100 : (activeStageEndMs / totalDurationMs) * 100;
   const stageProgressLabel = isFinished ? "locked" : "running";
-  const ringRadius = 42;
-  const ringCircumference = 2 * Math.PI * ringRadius;
-  const ringOffsetStart = ringCircumference * (1 - progressStartPercent / 100);
-  const ringOffsetEnd = ringCircumference * (1 - progressEndPercent / 100);
 
   useEffect(() => {
     let stageTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1086,13 +1326,13 @@ function AnalysisStep({
       if (index >= step.stages.length) {
         setIsFinished(true);
         if (step.autoAdvance) {
-          finishTimer = setTimeout(() => onAdvance(), reducedMotion ? 0 : 920);
+          finishTimer = setTimeout(() => onAdvance(), reducedMotion ? 0 : 140);
         }
         return;
       }
 
       setActiveStageIndex(index);
-      const durationMs = reducedMotion ? 160 : step.stages[index].durationMs;
+      const durationMs = stageDurations[index] ?? 0;
 
       stageTimer = setTimeout(() => {
         setCompletedStageIds((current) =>
@@ -1113,282 +1353,136 @@ function AnalysisStep({
         clearTimeout(finishTimer);
       }
     };
-  }, [onAdvance, reducedMotion, step]);
+  }, [onAdvance, reducedMotion, stageDurations, step]);
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-5">
       <div className="space-y-4">
         {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
         <h1 className={STEP_TITLE}>{step.title}</h1>
         {step.body ? <p className={STEP_BODY}>{step.body}</p> : null}
       </div>
 
-      <div
-        className={cn(
-          LIGHT_INSET,
-          "overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(246,245,241,0.94))] p-5 sm:p-6",
-        )}
-      >
-        <div className="relative overflow-hidden rounded-[1.7rem] border border-black/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,245,242,0.94))] p-4 shadow-[0_22px_60px_rgba(23,22,20,0.07)] sm:p-5">
-          {!reducedMotion ? (
-            <motion.div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-4 left-[-28%] w-[42%] rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(23,22,20,0.08),rgba(255,255,255,0))] blur-2xl"
-              animate={{ x: ["0%", "260%"] }}
-              transition={{
-                duration: Math.max(activeStageDurationMs / 1000, 1.6),
-                repeat: Infinity,
-                ease: "linear",
-              }}
-            />
-          ) : null}
+      <div className={cn(LIGHT_INSET, "overflow-hidden p-4 sm:p-5")}>
+        <div className="rounded-[1.55rem] border border-black/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,243,238,0.96))] p-4 shadow-[0_22px_60px_rgba(23,22,20,0.07)]">
+          <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.28em] text-[#7f776d]">
+            <span>analysis sweep</span>
+            <span>{Math.round(progressEndPercent)}%</span>
+          </div>
 
-          <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_148px] sm:items-center">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.28em] text-[#7f776d]">
-                <span>analysis sequence</span>
-                <span>{stageCount} phases</span>
-              </div>
-
-              <div className="rounded-[1.45rem] border border-black/[0.06] bg-[#f7f7f4] p-4">
-                <div className="flex h-[82px] items-end gap-2 overflow-hidden rounded-[1.2rem] border border-black/[0.05] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(242,242,238,0.88))] px-3 py-3">
-                  {ANALYSIS_BAR_LAYOUT.map((barHeight, index) => (
-                    <motion.div
-                      key={`analysis-bar-${index}`}
-                      className="min-w-0 flex-1 rounded-full bg-[linear-gradient(180deg,rgba(23,22,20,0.14),rgba(23,22,20,0.85))]"
-                      style={{ height: `${28 + barHeight * 42}px`, transformOrigin: "50% 100%" }}
-                      animate={
-                        reducedMotion
-                          ? undefined
-                          : {
-                              scaleY: [0.64, 1, 0.72],
-                              opacity: [0.36, 0.92, 0.44],
-                              y: [0, -3, 0],
-                            }
+          <div className="mt-4 flex h-[58px] items-end gap-2 overflow-hidden rounded-[1.2rem] border border-black/[0.05] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(242,242,238,0.88))] px-3 py-3">
+            {ANALYSIS_BAR_LAYOUT.map((barHeight, index) => (
+              <motion.div
+                key={`analysis-bar-${index}`}
+                className="min-w-0 flex-1 rounded-full bg-[linear-gradient(180deg,rgba(23,22,20,0.18),rgba(23,22,20,0.88))]"
+                style={{ height: `${18 + barHeight * 26}px`, transformOrigin: "50% 100%" }}
+                animate={
+                  reducedMotion
+                    ? undefined
+                    : {
+                        scaleY: [0.76, 1, 0.84],
+                        opacity: [0.42, 0.96, 0.52],
                       }
-                      transition={
-                        reducedMotion
-                          ? undefined
-                          : {
-                              duration: 1.5 + index * 0.08 + activeStageIndex * 0.12,
-                              delay: index * 0.06,
-                              repeat: Infinity,
-                              repeatType: "mirror",
-                              ease: "easeInOut",
-                            }
+                }
+                transition={
+                  reducedMotion
+                    ? undefined
+                    : {
+                        duration: 0.85 + index * 0.08,
+                        delay: index * 0.05,
+                        repeat: Infinity,
+                        repeatType: "mirror",
+                        ease: "easeInOut",
                       }
-                    />
-                  ))}
-                </div>
+                }
+              />
+            ))}
+          </div>
 
-                <div className="mt-4" role="status" aria-live="polite" aria-atomic="true">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-[11px] uppercase tracking-[0.28em] text-[#81796f]">
-                      phase {Math.min(activeStageIndex + 1, stageCount)} of {stageCount}
-                    </p>
-                    <span className="rounded-full border border-black/[0.08] bg-white px-2.5 py-1 text-[10px] uppercase tracking-[0.28em] text-[#5f584f]">
-                      {stageProgressLabel}
-                    </span>
-                  </div>
-
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={activeStage?.id ?? "analysis-finished"}
-                      initial={reducedMotion ? undefined : { opacity: 0, y: 14, filter: "blur(10px)" }}
-                      animate={reducedMotion ? undefined : { opacity: 1, y: 0, filter: "blur(0px)" }}
-                      exit={reducedMotion ? undefined : { opacity: 0, y: -10, filter: "blur(8px)" }}
-                      transition={reducedMotion ? undefined : { duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-                      className="mt-3"
-                    >
-                      <p className="text-[1.35rem] font-semibold leading-[1.05] tracking-[-0.04em] text-[#171410]">
-                        {isFinished ? "your report is locked in." : activeStage?.label ?? "finalizing your profile"}
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-[#575149]">
-                        {isFinished
-                          ? "we have resolved the strongest profile and staged the result report."
-                          : activeStage?.description ?? "handoff to your result screen"}
-                      </p>
-                    </motion.div>
-                  </AnimatePresence>
-
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.28em] text-[#8a8278]">
-                      <span>current phase progress</span>
-                      <span>{isFinished ? "complete" : "in motion"}</span>
-                    </div>
-                    <div className="mt-2 h-[5px] overflow-hidden rounded-full bg-black/[0.08]">
-                      <motion.div
-                        key={`stage-progress-${isFinished ? "complete" : activeStage?.id ?? "analysis"}`}
-                        className="h-full rounded-full bg-[#171614]"
-                        initial={{ width: isFinished ? "100%" : "0%" }}
-                        animate={{ width: "100%" }}
-                        transition={{
-                          duration: isFinished ? 0.4 : reducedMotion ? 0 : activeStageDurationMs / 1000,
-                          ease: "linear",
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
+          <div className="mt-4" role="status" aria-live="polite" aria-atomic="true">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] uppercase tracking-[0.28em] text-[#81796f]">
+                phase {Math.min(activeStageIndex + 1, stageCount)} of {stageCount}
+              </p>
+              <span className="rounded-full border border-black/[0.08] bg-white px-2.5 py-1 text-[10px] uppercase tracking-[0.28em] text-[#5f584f]">
+                {stageProgressLabel}
+              </span>
             </div>
-
-            <div className="mx-auto flex w-full max-w-[148px] flex-col items-center justify-center gap-4">
-              <div className="relative flex h-[138px] w-[138px] items-center justify-center">
-                {!reducedMotion ? (
-                  <>
-                    <motion.span
-                      className="absolute inset-[8px] rounded-full border border-black/[0.06]"
-                      animate={{ scale: [1, 1.06, 1], opacity: [0.12, 0.22, 0.12] }}
-                      transition={{ duration: 2.7, repeat: Infinity, ease: "easeInOut" }}
-                    />
-                    <motion.span
-                      className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(23,22,20,0.07),rgba(23,22,20,0))]"
-                      animate={{ scale: [0.94, 1.02, 0.94], opacity: [0.26, 0.54, 0.26] }}
-                      transition={{ duration: 2.9, repeat: Infinity, ease: "easeInOut" }}
-                    />
-                  </>
-                ) : null}
-                <svg className="absolute inset-0 -rotate-90" viewBox="0 0 104 104" aria-hidden="true">
-                  <circle
-                    cx="52"
-                    cy="52"
-                    r={ringRadius}
-                    fill="none"
-                    stroke="rgba(23,22,20,0.08)"
-                    strokeWidth="6"
-                  />
-                  <motion.circle
-                    key={`analysis-ring-${isFinished ? "complete" : activeStage?.id ?? "analysis"}`}
-                    cx="52"
-                    cy="52"
-                    r={ringRadius}
-                    fill="none"
-                    stroke="#171614"
-                    strokeLinecap="round"
-                    strokeWidth="6"
-                    strokeDasharray={ringCircumference}
-                    initial={{ strokeDashoffset: ringOffsetStart }}
-                    animate={{ strokeDashoffset: ringOffsetEnd }}
-                    transition={{
-                      duration: isFinished ? 0.42 : reducedMotion ? 0 : activeStageDurationMs / 1000,
-                      ease: "linear",
-                    }}
-                  />
-                </svg>
-                <div className="relative flex h-[92px] w-[92px] flex-col items-center justify-center rounded-full border border-black/[0.08] bg-white text-[#171614] shadow-[0_16px_42px_rgba(23,22,20,0.08)]">
-                  <Sparkles className="h-5 w-5" strokeWidth={1.2} />
-                  <span className="mt-2 text-[11px] uppercase tracking-[0.28em] text-[#6f675f]">
-                    {Math.round(progressEndPercent)}%
-                  </span>
-                </div>
-              </div>
-
-              <div className="w-full rounded-[1.3rem] border border-black/[0.07] bg-white/92 px-4 py-3 text-center shadow-[0_14px_36px_rgba(23,22,20,0.05)]">
-                <p className="text-[10px] uppercase tracking-[0.28em] text-[#8a8278]">status</p>
-                <p className="mt-2 text-sm font-medium tracking-[-0.02em] text-[#171410]">
-                  {completedCount}/{stageCount} phases resolved
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeStage?.id ?? "analysis-finished"}
+                initial={reducedMotion ? undefined : { opacity: 0, y: 10 }}
+                animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+                exit={reducedMotion ? undefined : { opacity: 0, y: -8 }}
+                transition={reducedMotion ? undefined : { duration: 0.24 }}
+                className="mt-3"
+              >
+                <p className="text-[1.2rem] font-semibold leading-[1.04] tracking-[-0.04em] text-[#171410]">
+                  {isFinished ? "your report is locked in." : activeStage?.label ?? "finalizing your profile"}
                 </p>
-                <p className="mt-1 text-xs leading-5 text-[#656057]">
-                  each pass handles a different layer before we hand off the result.
+                <p className="mt-2 text-sm leading-6 text-[#575149]">
+                  {isFinished
+                    ? "we resolved the strongest pattern and staged the next move."
+                    : activeStage?.description ?? "handoff to your result screen"}
                 </p>
-              </div>
+              </motion.div>
+            </AnimatePresence>
+
+            <div className="mt-4 h-[5px] overflow-hidden rounded-full bg-black/[0.08]">
+              <motion.div
+                key={`overall-progress-${isFinished ? "complete" : activeStage?.id ?? "analysis"}`}
+                className="h-full rounded-full bg-[#171614]"
+                initial={{ width: `${Math.max(progressStartPercent, 5)}%` }}
+                animate={{ width: `${Math.max(progressEndPercent, 10)}%` }}
+                transition={{
+                  duration: isFinished ? 0.24 : reducedMotion ? 0 : activeStageDurationMs / 1000,
+                  ease: "linear",
+                }}
+              />
             </div>
           </div>
         </div>
 
-        <div className="mt-5 h-[5px] overflow-hidden rounded-full bg-black/[0.08]">
-          <motion.div
-            key={`overall-progress-${isFinished ? "complete" : activeStage?.id ?? "analysis"}`}
-            className="h-full rounded-full bg-[#171614]"
-            initial={{ width: `${Math.max(progressStartPercent, 5)}%` }}
-            animate={{ width: `${Math.max(progressEndPercent, 8)}%` }}
-            transition={{
-              duration: isFinished ? 0.42 : reducedMotion ? 0 : activeStageDurationMs / 1000,
-              ease: "linear",
-            }}
-          />
-        </div>
-
-        <div className="mt-6 grid gap-3">
+        <div className="mt-4 grid gap-2">
           {step.stages.map((stage, index) => {
             const isActive = index === activeStageIndex && !isFinished;
             const isComplete = completedStageIds.includes(stage.id) || isFinished;
+
             return (
-              <motion.div
+              <div
                 key={stage.id}
-                initial={reducedMotion ? undefined : { opacity: 0, y: 18 }}
-                animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
-                transition={reducedMotion ? undefined : { duration: 0.28, delay: 0.06 * index }}
                 className={cn(
-                  "relative overflow-hidden rounded-[1.45rem] border px-4 py-4 transition duration-300",
+                  "flex items-center gap-3 rounded-[1.2rem] border px-3 py-3",
                   isActive
-                    ? "border-[#171614] bg-[linear-gradient(180deg,rgba(255,255,255,1),rgba(246,245,241,0.98))] text-[#171410] shadow-[0_24px_52px_rgba(23,22,20,0.12)]"
+                    ? "border-[#171614] bg-white text-[#171410]"
                     : isComplete
-                      ? "border-black/[0.08] bg-white text-[#171614]"
-                      : "border-black/[0.06] bg-[#f4f4f1] text-[#3c3934]",
+                      ? "border-black/[0.08] bg-white text-[#171410]"
+                      : "border-black/[0.06] bg-[#f4f4f1] text-[#5c554d]",
                 )}
               >
-                <motion.div
-                  aria-hidden="true"
+                <div
                   className={cn(
-                    "pointer-events-none absolute inset-y-0 left-0 w-full origin-left",
-                    isActive ? "bg-[linear-gradient(90deg,rgba(23,22,20,0.08),rgba(23,22,20,0))]" : "bg-black/[0.04]",
+                    "flex h-7 w-7 flex-none items-center justify-center rounded-full border",
+                    isActive || isComplete ? "border-black/[0.08] bg-[#171614] text-white" : "border-black/[0.08] bg-white",
                   )}
-                  initial={false}
-                  animate={{ scaleX: isActive || isComplete ? 1 : 0 }}
-                  transition={{ duration: reducedMotion ? 0 : 0.28, ease: "easeOut" }}
-                />
-                <div className="relative flex items-start gap-3">
-                  <div
-                    className={cn(
-                      "mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-full border",
-                      isActive
-                        ? "border-black/[0.08] bg-[#171614] text-white"
-                        : isComplete
-                          ? "border-black/[0.08] bg-[#171614] text-white"
-                          : "border-black/[0.08] bg-white",
-                    )}
-                  >
-                    {isComplete ? (
-                      <Check className="h-3.5 w-3.5 text-white" strokeWidth={1.2} />
-                    ) : isActive ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-white/80" strokeWidth={1.2} />
-                    ) : (
-                      <span className="h-2 w-2 rounded-full bg-[#171614]/20" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium tracking-[-0.01em] text-current">
-                        {stage.label}
-                      </p>
-                      <span className={cn("text-[11px] uppercase tracking-[0.26em]", isActive ? "text-[#5f584f]" : "text-[#8a8175]")}>
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                    </div>
-                    {stage.description ? (
-                      <p className="mt-1 text-sm leading-6 text-[#5b544d]">
-                        {stage.description}
-                      </p>
-                    ) : null}
-                    {isActive ? (
-                      <div className="mt-3 h-[4px] overflow-hidden rounded-full bg-black/[0.08]">
-                        <motion.div
-                          key={`stage-card-progress-${stage.id}`}
-                          className="h-full rounded-full bg-[#171614]"
-                          initial={{ width: "0%" }}
-                          animate={{ width: "100%" }}
-                          transition={{
-                            duration: reducedMotion ? 0 : stage.durationMs / 1000,
-                            ease: "linear",
-                          }}
-                        />
-                      </div>
-                    ) : null}
+                >
+                  {isComplete ? (
+                    <Check className="h-3.5 w-3.5 text-white" strokeWidth={1.2} />
+                  ) : isActive ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-white/80" strokeWidth={1.2} />
+                  ) : (
+                    <span className="h-2 w-2 rounded-full bg-[#171614]/20" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium tracking-[-0.01em] text-current">{stage.label}</p>
+                    <span className="text-[10px] uppercase tracking-[0.26em] text-[#8a8175]">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
                   </div>
                 </div>
-              </motion.div>
+              </div>
             );
           })}
         </div>
@@ -1406,16 +1500,23 @@ function AnalysisStep({
 function ResultStep({
   step,
   resultProfile,
+  adaptiveSignal,
   reducedMotion,
+  mobileRailActive,
   onAdvance,
 }: {
   step: Extract<QuizStep, { kind: "result" }>;
   resultProfile: QuizResultProfile;
+  adaptiveSignal: AdaptiveSignalSummary;
   reducedMotion: boolean;
+  mobileRailActive: boolean;
   onAdvance: () => void;
 }) {
+  const headlineCriteria = resultProfile.criteria.slice(0, 2);
+  const headlineMetrics = resultProfile.metrics.slice(0, 2);
+
   return (
-    <div className="space-y-7">
+    <div className="space-y-5">
       <div className="space-y-4">
         {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
         <div className="inline-flex rounded-full border border-black/[0.08] bg-white/84 px-3 py-2 text-[11px] uppercase tracking-[0.3em] text-[#5b554d]">
@@ -1435,32 +1536,28 @@ function ResultStep({
         <p className="mt-3 text-lg font-medium leading-7 tracking-[-0.03em] text-[#171410]">
           {resultProfile.affirmation}
         </p>
-        <p className="mt-4 text-sm leading-7 text-[#575149]">{resultProfile.mechanism}</p>
-      </motion.div>
-
-      <motion.div
-        initial={reducedMotion ? undefined : { opacity: 0, y: 18 }}
-        animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
-        transition={reducedMotion ? undefined : { duration: 0.38, delay: 0.05 }}
-        className={cn(LIGHT_INSET, "p-5 sm:p-6")}
-      >
-        <div className="space-y-2">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-[#80786e]">{resultProfile.graphTitle}</p>
-          <p className="text-sm leading-6 text-[#5a544c]">{resultProfile.graphCaption}</p>
-        </div>
-        <div className="mt-5">
-          <QuizResultGraph resultId={resultProfile.id} metrics={resultProfile.metrics} />
+        <p className="mt-3 text-sm leading-6 text-[#575149]">{resultProfile.mechanism}</p>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          {headlineMetrics.map((metric) => (
+            <MetricChip key={metric.id} label={metric.label} value={metric.value} />
+          ))}
         </div>
       </motion.div>
 
-      <div className="grid gap-3">
-        {resultProfile.criteria.map((criterion, index) => (
+      <AdaptiveCueCard
+        adaptiveSignal={adaptiveSignal}
+        eyebrow="what pushed this result"
+        showSelectionTrail
+      />
+
+      <div className="grid gap-2">
+        {headlineCriteria.map((criterion, index) => (
           <motion.div
             key={criterion.id}
             initial={reducedMotion ? undefined : { opacity: 0, x: -14 }}
             animate={reducedMotion ? undefined : { opacity: 1, x: 0 }}
             transition={reducedMotion ? undefined : { duration: 0.28, delay: 0.06 * index }}
-            className={cn(SECONDARY_PANEL, "px-4 py-4")}
+            className={cn(SECONDARY_PANEL, "px-4 py-3")}
           >
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-medium tracking-[-0.01em] text-[#171410]">{criterion.label}</p>
@@ -1473,34 +1570,59 @@ function ResultStep({
         ))}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className={cn(LIGHT_INSET, "p-5")}>
-          <p className="text-[11px] uppercase tracking-[0.3em] text-[#80786e]">what supports this read</p>
-          <div className="mt-4 grid gap-3">
-            {resultProfile.educationBullets.map((bullet) => (
-              <div key={bullet} className="flex gap-3">
-                <div className="mt-1 h-2.5 w-2.5 flex-none rounded-full bg-[#171614]" />
-                <p className="text-sm leading-6 text-[#5b554d]">{bullet}</p>
+      <ExpandablePanel eyebrow="full breakdown" title="open graph and supporting notes">
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <p className="text-[11px] uppercase tracking-[0.3em] text-[#80786e]">{resultProfile.graphTitle}</p>
+            <p className="text-sm leading-6 text-[#5a544c]">{resultProfile.graphCaption}</p>
+          </div>
+          <QuizResultGraph resultId={resultProfile.id} metrics={resultProfile.metrics} />
+          <div className="grid gap-3">
+            {resultProfile.criteria.map((criterion) => (
+              <div key={criterion.id} className={cn(SECONDARY_PANEL, "px-4 py-4")}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium tracking-[-0.01em] text-[#171410]">{criterion.label}</p>
+                  <span className="text-[11px] uppercase tracking-[0.28em] text-[#827a70]">
+                    {emphasisLabel(criterion.emphasis)}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-[#5c554d]">{criterion.detail}</p>
               </div>
             ))}
           </div>
-        </div>
-        <div className="rounded-[1.6rem] border border-[#171614] bg-[#171614] p-5 text-white shadow-[0_24px_50px_rgba(23,22,20,0.12)]">
-          <p className="text-[11px] uppercase tracking-[0.3em] text-white/46">keep in mind</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {resultProfile.dopamineCandies.map((candy) => (
-              <span
-                key={candy}
-                className="rounded-full border border-white/14 bg-white/8 px-3 py-2 text-xs leading-5 text-white/82"
-              >
-                {candy}
-              </span>
-            ))}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className={cn(SECONDARY_PANEL, "p-4")}>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-[#80786e]">what supports this read</p>
+              <div className="mt-3 grid gap-2.5">
+                {resultProfile.educationBullets.map((bullet) => (
+                  <div key={bullet} className="flex gap-3">
+                    <div className="mt-1 h-2.5 w-2.5 flex-none rounded-full bg-[#171614]" />
+                    <p className="text-sm leading-6 text-[#5b554d]">{bullet}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className={cn(PREMIUM_PANEL, "p-4")}>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-white/46">keep in mind</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {resultProfile.dopamineCandies.map((candy) => (
+                  <span
+                    key={candy}
+                    className="rounded-full border border-white/14 bg-white/8 px-3 py-2 text-xs leading-5 text-white/82"
+                  >
+                    {candy}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </ExpandablePanel>
 
-      <Button onClick={onAdvance} className={PRIMARY_BUTTON}>
+      <Button
+        onClick={onAdvance}
+        className={cn(PRIMARY_BUTTON, inlineActionVisibilityClass(mobileRailActive))}
+      >
         {step.primaryLabel}
       </Button>
 
@@ -1511,28 +1633,42 @@ function ResultStep({
 
 function LeadStep({
   step,
+  resultProfile,
+  adaptiveSignal,
   leadValues,
   consent,
+  isReady,
+  mobileRailActive,
   onLeadFieldChange,
   onConsentChange,
   onLeadSubmit,
 }: {
   step: Extract<QuizStep, { kind: "lead" }>;
+  resultProfile: QuizResultProfile;
+  adaptiveSignal: AdaptiveSignalSummary;
   leadValues: Record<string, string>;
   consent: boolean;
+  isReady: boolean;
+  mobileRailActive: boolean;
   onLeadFieldChange: (fieldId: string, value: string) => void;
   onConsentChange: (checked: boolean) => void;
   onLeadSubmit: () => void;
 }) {
   return (
-    <div className="space-y-7">
+    <div className="space-y-5">
       <div className="space-y-4">
         {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
         <h1 className={STEP_TITLE}>{step.title}</h1>
         {step.body ? <p className={STEP_BODY}>{step.body}</p> : null}
       </div>
 
-      <div className={cn(LIGHT_INSET, "space-y-4 p-5 sm:p-6")}>
+      <AdaptiveCueCard
+        adaptiveSignal={adaptiveSignal}
+        eyebrow="what you're sending"
+        customLead={`sending ${resultProfile.badge}`}
+      />
+
+      <div className={cn(LIGHT_INSET, "space-y-4 p-4 sm:p-5")}>
         {step.fields.map((field) => (
           <LeadFieldInput
             key={field.id}
@@ -1553,7 +1689,11 @@ function LeadStep({
         </label>
       </div>
 
-      <Button onClick={onLeadSubmit} className={PRIMARY_BUTTON}>
+      <Button
+        disabled={!isReady}
+        onClick={onLeadSubmit}
+        className={cn(PRIMARY_BUTTON, inlineActionVisibilityClass(mobileRailActive))}
+      >
         {step.submitLabel}
       </Button>
 
@@ -1565,50 +1705,204 @@ function LeadStep({
 function OfferStep({
   step,
   resultProfile,
+  mobileRailActive,
   onOfferClick,
 }: {
   step: Extract<QuizStep, { kind: "offer" }>;
   resultProfile: QuizResultProfile;
+  mobileRailActive: boolean;
   onOfferClick: () => void;
 }) {
   return (
-    <div className="space-y-7">
+    <div className="space-y-5">
       <div className="space-y-4">
         {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
         <h1 className={STEP_TITLE}>{step.title}</h1>
         {step.body ? <p className={STEP_BODY}>{step.body}</p> : null}
       </div>
 
-      <div className={cn(LIGHT_INSET, "p-5 sm:p-6")}>
+      <div className={cn(LIGHT_INSET, "space-y-4 p-5 sm:p-6")}>
+        <div className="flex flex-wrap gap-2">
+          <SignalPill>{resultProfile.badge}</SignalPill>
+          {step.note ? <SignalPill tone="soft">{step.note}</SignalPill> : null}
+        </div>
         <p className="text-[11px] uppercase tracking-[0.3em] text-[#80786e]">why this fits</p>
         <p className="mt-3 text-lg font-medium leading-7 tracking-[-0.03em] text-[#171410]">
           {resultProfile.offerBridge}
         </p>
 
-        <div className="mt-6 grid gap-3">
+        <div className="grid gap-2">
           {step.bullets.map((bullet) => (
-            <div key={bullet} className={cn(SECONDARY_PANEL, "flex gap-3 px-4 py-4")}>
+            <div key={bullet} className={cn(SECONDARY_PANEL, "flex gap-3 px-4 py-3")}>
               <div className="mt-1 flex h-6 w-6 flex-none items-center justify-center rounded-full border border-black/[0.08] bg-[#171614]">
                 <Check className="h-3.5 w-3.5 text-white" strokeWidth={1.2} />
               </div>
-              <p className="text-sm leading-6 text-[#554f47]">{bullet}</p>
+              <p className="text-sm leading-5 text-[#554f47]">{bullet}</p>
             </div>
           ))}
         </div>
       </div>
 
-      <Button asChild className={PRIMARY_BUTTON}>
-        <a href={step.ctaUrl} onClick={onOfferClick} rel="noopener noreferrer" target="_blank">
-          {step.ctaLabel}
-        </a>
-      </Button>
+      <div className={mobileRailActive ? "hidden sm:block" : ""}>
+        <Button asChild className={PRIMARY_BUTTON}>
+          <a href={step.ctaUrl} onClick={onOfferClick} rel="noopener noreferrer" target="_blank">
+            {step.ctaLabel}
+          </a>
+        </Button>
+      </div>
 
       {step.note ? (
-        <p className="text-center text-xs uppercase tracking-[0.28em] text-[#857d73]">{step.note}</p>
+        <p className="hidden text-center text-xs uppercase tracking-[0.28em] text-[#857d73] sm:block">{step.note}</p>
       ) : null}
       {step.guarantee ? (
         <p className="text-center text-sm leading-6 text-[#6b645b]">{step.guarantee}</p>
       ) : null}
+    </div>
+  );
+}
+
+function MobileActionRail({
+  kind,
+  label,
+  caption,
+  disabled = false,
+  href,
+  onClick,
+}: {
+  kind: "button" | "link";
+  label: string;
+  caption?: string;
+  disabled?: boolean;
+  href?: string;
+  onClick: () => void;
+}) {
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(env(safe-area-inset-bottom)+0.85rem)] sm:hidden">
+      <div className="pointer-events-auto mx-auto w-full max-w-[446px] rounded-[1.5rem] border border-black/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(244,240,232,0.96))] p-3 shadow-[0_-8px_40px_rgba(23,22,20,0.12)] backdrop-blur-xl">
+        {caption ? (
+          <p className="px-1 pb-2 text-[10px] uppercase tracking-[0.28em] text-[#6f675d]">
+            {caption}
+          </p>
+        ) : null}
+
+        {kind === "button" ? (
+          <Button
+            disabled={disabled}
+            onClick={onClick}
+            className={cn(PRIMARY_BUTTON, "h-14 justify-between rounded-[1.2rem] px-5")}
+          >
+            <span className="text-left">{label}</span>
+            <ArrowRight className="h-4 w-4" strokeWidth={1.3} />
+          </Button>
+        ) : (
+          <Button asChild className={cn(PRIMARY_BUTTON, "h-14 justify-between rounded-[1.2rem] px-5")}>
+            <a href={href} onClick={onClick} rel="noopener noreferrer" target="_blank">
+              <span className="text-left">{label}</span>
+              <ArrowRight className="h-4 w-4" strokeWidth={1.3} />
+            </a>
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdaptiveCueCard({
+  adaptiveSignal,
+  eyebrow,
+  showSelectionTrail = false,
+  customLead,
+}: {
+  adaptiveSignal: AdaptiveSignalSummary;
+  eyebrow: string;
+  showSelectionTrail?: boolean;
+  customLead?: string;
+}) {
+  return (
+    <div className={cn(SECONDARY_PANEL, "space-y-3 px-4 py-4")}>
+      <p className="text-[11px] uppercase tracking-[0.28em] text-[#7c746a]">{eyebrow}</p>
+      <div className="flex flex-wrap gap-2">
+        <SignalPill>{customLead ?? adaptiveSignal.leadingBadge}</SignalPill>
+        {adaptiveSignal.recentSelection ? (
+          <SignalPill tone="soft">{adaptiveSignal.recentSelection.optionLabel}</SignalPill>
+        ) : null}
+      </div>
+
+      {showSelectionTrail && adaptiveSignal.recentSelections.length > 0 ? (
+        <div className="grid gap-2">
+          {adaptiveSignal.recentSelections.map((selection) => (
+            <div
+              key={`${selection.stepId}-${selection.optionLabel}`}
+              className="rounded-[1.15rem] border border-black/[0.06] bg-white/70 px-3 py-3"
+            >
+              <p className="text-[10px] uppercase tracking-[0.26em] text-[#888074]">{selection.stepTitle}</p>
+              <p className="mt-2 text-sm leading-6 text-[#453f38]">{selection.optionLabel}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ExpandablePanel({
+  eyebrow,
+  title,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className={cn(LIGHT_INSET, "group p-4 sm:p-5")}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.28em] text-[#7b746a]">{eyebrow}</p>
+          <p className="mt-1 text-sm font-medium tracking-[-0.01em] text-[#171410]">{title}</p>
+        </div>
+        <ChevronDown className="h-4 w-4 text-[#6e665c] transition group-open:rotate-180" strokeWidth={1.6} />
+      </summary>
+      <div className="mt-4">{children}</div>
+    </details>
+  );
+}
+
+function SignalPill({
+  children,
+  tone = "dark",
+}: {
+  children: string;
+  tone?: "dark" | "soft";
+}) {
+  return (
+    <span
+      className={cn(
+        "rounded-full px-3 py-2 text-[11px] uppercase tracking-[0.24em]",
+        tone === "dark"
+          ? "border border-[#171614] bg-[#171614] text-white"
+          : "border border-black/[0.08] bg-white text-[#5b544c]",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function MetricChip({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-[1.2rem] border border-black/[0.06] bg-[#f7f5ef] px-3 py-3">
+      <p className="text-[10px] uppercase tracking-[0.26em] text-[#8a8278]">{label}</p>
+      <p className="mt-2 text-lg font-semibold tracking-[-0.03em] text-[#171410]">
+        {value}
+        <span className="ml-1 text-xs font-medium text-[#847c72]">/100</span>
+      </p>
     </div>
   );
 }
