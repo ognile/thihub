@@ -161,27 +161,33 @@ await runCase("middleware bypass on unrelated public path", async () => {
   );
 });
 
-await runCase("admin unauthenticated redirect", async () => {
-  const response = await fetch(toUrl("/admin"), { redirect: "manual" });
-  assert(
-    [302, 303, 307, 308].includes(response.status),
-    `Expected redirect status but received ${response.status}`,
-  );
-  const location = response.headers.get("location") ?? "";
-  assert(location.includes("/admin/login"), "Expected redirect to /admin/login");
-});
+if (SUPABASE_ENV_READY) {
+  await runCase("admin unauthenticated redirect", async () => {
+    const response = await fetch(toUrl("/admin"), { redirect: "manual" });
+    assert(
+      [302, 303, 307, 308].includes(response.status),
+      `Expected redirect status but received ${response.status}`,
+    );
+    const location = response.headers.get("location") ?? "";
+    assert(location.includes("/admin/login"), "Expected redirect to /admin/login");
+  });
 
-await runCase("quiz admin api requires auth", async () => {
-  const { response, json } = await requestJson("/api/quizzes");
-  assert(response.status === 401, `Expected 401 but received ${response.status}`);
-  assert(json && typeof json === "object" && json.error === "Unauthorized", "Expected unauthorized payload");
-});
+  await runCase("quiz admin api requires auth", async () => {
+    const { response, json } = await requestJson("/api/quizzes");
+    assert(response.status === 401, `Expected 401 but received ${response.status}`);
+    assert(json && typeof json === "object" && json.error === "Unauthorized", "Expected unauthorized payload");
+  });
 
-await runCase("logout endpoint reachable", async () => {
-  const { response, json } = await requestJson("/api/auth/logout", { method: "POST" });
-  assert(response.status === 200, `Expected 200 but received ${response.status}`);
-  assert(json && json.success === true, "Expected successful logout payload");
-});
+  await runCase("logout endpoint reachable", async () => {
+    const { response, json } = await requestJson("/api/auth/logout", { method: "POST" });
+    assert(response.status === 200, `Expected 200 but received ${response.status}`);
+    assert(json && json.success === true, "Expected successful logout payload");
+  });
+} else {
+  skipCase("admin unauthenticated redirect", "NEXT_PUBLIC_SUPABASE_URL/NEXT_PUBLIC_SUPABASE_ANON_KEY are not set");
+  skipCase("quiz admin api requires auth", "NEXT_PUBLIC_SUPABASE_URL/NEXT_PUBLIC_SUPABASE_ANON_KEY are not set");
+  skipCase("logout endpoint reachable", "NEXT_PUBLIC_SUPABASE_URL/NEXT_PUBLIC_SUPABASE_ANON_KEY are not set");
+}
 
 if (SUPABASE_ENV_READY) {
   await runCase("admin login route", async () => {

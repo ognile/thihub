@@ -44,6 +44,7 @@
 - repo-wide lint cleanup was feasible in one sweep because the remaining offenders were localized and mostly mechanical: purity issues, ref reads during render, unescaped text, narrow typing, and unused imports.
 - the canonical local verifier needed hardening too: launching `next start` through `npm` on a fixed port created false negatives when a stale local server was already listening. the verifier now starts `next` directly and selects a free port by default.
 - the article page regression was caused by passing a function-valued `loader` prop to `next/image` across a server component boundary. relying on explicit `remotePatterns` plus `unoptimized` resolved the runtime error cleanly.
+- github actions runs without the local supabase env, so the regression harness must skip auth-dependent middleware/api cases when those env vars are absent instead of treating missing configuration as an app regression.
 
 ## proven wins
 - safety recovery path exists:
@@ -65,6 +66,7 @@
 - canonical verifier `npm run verify:repo` passes end-to-end.
 - admin geometry checks passed on desktop and mobile using a disposable authenticated test user, and the admin visual suite completed into `ops/visual-snapshots/repo-hardening-local/`.
 - explicit article+quiz regression coverage passed with `20` passed, `0` failed, `0` skipped for homepage, article entry, quiz entry, and quiz completion/drop-off persistence.
+- the canonical verifier still passes locally after making the regression harness env-aware for github actions.
 
 ## open risks
 - github actions verification still cannot run authenticated admin geometry/visual checks without credentials, so those remain local/manual release gates.

@@ -21,6 +21,7 @@
 - record safety snapshot branch names, commits, and external archive paths in `task.md`.
 - treat `npm run verify:repo` as the default local proof gate for repo-wide hardening work.
 - when ci uses the canonical verifier, upload `ops/reports` and snapshot artifacts on failure so the failure can be debugged without rerunning blindly.
+- if a verifier runs in multiple environments, make the regression harness explicitly skip configuration-dependent checks when the required env is absent instead of letting missing config masquerade as app failure.
 
 ## promotion rules
 - promote only evidence-backed reusable lessons
