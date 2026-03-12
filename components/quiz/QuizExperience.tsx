@@ -71,6 +71,12 @@ const OPTION_IDLE =
 const OPTION_ACTIVE =
   "border-[#171614] bg-[#171614] text-white shadow-[0_24px_52px_rgba(23,22,20,0.16)]";
 const ANALYSIS_BAR_LAYOUT = [0.42, 0.68, 0.94, 0.58, 0.8];
+const MOBILE_BREAKPOINT_QUERY = "(max-width: 639px)";
+const MOBILE_ANALYSIS_STAGE_DURATIONS = [1050, 1150, 1100];
+const MOBILE_ANALYSIS_COMPLETION_DELAY_MS = 550;
+const MOBILE_STEP_EASE = [0.22, 1, 0.36, 1] as const;
+const DESKTOP_STAGE_EASE = [0.19, 1, 0.22, 1] as const;
+const MOBILE_PROGRESS_EASE = [0.16, 1, 0.3, 1] as const;
 
 interface QuizExperienceProps {
   quizId: string;
@@ -157,6 +163,14 @@ interface AdaptiveSignalSummary {
   recentSelections: AdaptiveSelectionSummary[];
 }
 
+interface MobileAnalysisStageSummary {
+  id: string;
+  label: string;
+  description: string;
+  evidenceLabel: string;
+  evidenceValue: string;
+}
+
 function getQuestionStep(definition: QuizDefinition, stepId: string) {
   return definition.steps.find(
     (candidate): candidate is Extract<QuizStep, { kind: "question" }> =>
@@ -202,6 +216,38 @@ function buildAdaptiveSignal(
   };
 }
 
+function buildMobileAnalysisStages(
+  adaptiveSignal: AdaptiveSignalSummary,
+  resultProfile: QuizResultProfile,
+): MobileAnalysisStageSummary[] {
+  const primarySelection = adaptiveSignal.recentSelections[0]?.optionLabel ?? "your strongest recent answer";
+  const secondarySelection = adaptiveSignal.recentSelections[1]?.optionLabel ?? adaptiveSignal.leadingBadge;
+
+  return [
+    {
+      id: "normalize-answers",
+      label: "normalizing your answers",
+      description: "cleaning the loudest clues first so noise stops competing with the real pattern.",
+      evidenceLabel: "recent signal",
+      evidenceValue: primarySelection,
+    },
+    {
+      id: "compare-clusters",
+      label: "comparing signal clusters",
+      description: `checking how your answers stack against the strongest ${adaptiveSignal.leadingBadge.toLowerCase()} pattern.`,
+      evidenceLabel: "highest overlap",
+      evidenceValue: secondarySelection,
+    },
+    {
+      id: "lock-pattern",
+      label: "locking the strongest pattern",
+      description: "staging the clearest next move so the result reads like a report instead of a generic score.",
+      evidenceLabel: "report direction",
+      evidenceValue: resultProfile.badge,
+    },
+  ];
+}
+
 function isLeadStepReady(
   step: Extract<QuizStep, { kind: "lead" }>,
   leadValues: Record<string, string>,
@@ -241,6 +287,9 @@ export default function QuizExperience({
   const [consent, setConsent] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [draftStepId, setDraftStepId] = useState<string | null>(null);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [isMobileKeyboardOpen, setIsMobileKeyboardOpen] = useState(false);
+  const [isLeadFieldFocused, setIsLeadFieldFocused] = useState(false);
   const completionSentRef = useRef(false);
   const lastViewedRef = useRef<string | null>(null);
   const pendingAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -296,6 +345,41 @@ export default function QuizExperience({
 
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [embedded]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(MOBILE_BREAKPOINT_QUERY);
+    const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
+
+    syncViewport();
+    mediaQuery.addEventListener("change", syncViewport);
+
+    return () => mediaQuery.removeEventListener("change", syncViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileViewport || currentStep?.kind !== "lead") {
+      return;
+    }
+
+    const viewport = window.visualViewport;
+    if (!viewport) {
+      return;
+    }
+
+    const syncKeyboardState = () => {
+      const keyboardInset = Math.max(0, window.innerHeight - viewport.height);
+      setIsMobileKeyboardOpen(keyboardInset > 120);
+    };
+
+    syncKeyboardState();
+    viewport.addEventListener("resize", syncKeyboardState);
+    viewport.addEventListener("scroll", syncKeyboardState);
+
+    return () => {
+      viewport.removeEventListener("resize", syncKeyboardState);
+      viewport.removeEventListener("scroll", syncKeyboardState);
+    };
+  }, [currentStep?.kind, isMobileViewport]);
 
   useEffect(() => {
     let initialSnapshot = createInitialQuizSnapshot(
@@ -411,6 +495,8 @@ export default function QuizExperience({
     (nextSnapshot: QuizSessionSnapshot) => {
       persistSnapshot(nextSnapshot);
       resetDraftState();
+      setIsLeadFieldFocused(false);
+      setIsMobileKeyboardOpen(false);
       resetViewport();
       startTransition(() => setSnapshot(nextSnapshot));
     },
@@ -656,29 +742,64 @@ export default function QuizExperience({
     currentStep?.kind === "lead"
       ? isLeadStepReady(currentStep, resolvedLeadValues, resolvedConsent)
       : false;
+  const isLeadFieldCurrentlyFocused = currentStep?.kind === "lead" && isLeadFieldFocused;
+  const isPhoneViewport = !embedded && isMobileViewport;
   const sourceLabel = entrySource.replace(/-/g, " ");
   const visibleProgress = Math.max(progress.percent, 6);
   const progressIndicatorLeft = Math.min(Math.max(visibleProgress, 6), 97);
-  const mobileRailActive = !embedded && ["welcome", "message", "result", "lead", "offer"].includes(currentStep?.kind ?? "");
+  const mobileRailActive =
+    isPhoneViewport &&
+    ["welcome", "message", "result", "lead", "offer"].includes(currentStep?.kind ?? "") &&
+    !(currentStep?.kind === "lead" && (isLeadFieldCurrentlyFocused || isMobileKeyboardOpen));
 
   const stageMotion = reducedMotion
     ? { initial: { opacity: 1 }, animate: { opacity: 1 }, exit: { opacity: 1 } }
+    : isPhoneViewport
+      ? {
+          initial: { opacity: 0, y: 8 },
+          animate: { opacity: 1, y: 0 },
+          exit: { opacity: 0 },
+        }
     : {
         initial: { opacity: 0, x: 58, y: 16, scale: 0.976, filter: "blur(16px)" },
         animate: { opacity: 1, x: 0, y: 0, scale: 1, filter: "blur(0px)" },
         exit: { opacity: 0, x: -46, y: -12, scale: 0.986, filter: "blur(14px)" },
       };
+  const stageTransition = reducedMotion
+    ? { duration: 0 }
+    : isPhoneViewport
+      ? { duration: 0.2, ease: MOBILE_STEP_EASE }
+      : { duration: 0.58, ease: DESKTOP_STAGE_EASE };
+  const shellTransition = reducedMotion
+    ? { duration: 0 }
+    : isPhoneViewport
+      ? { duration: 0.22, ease: MOBILE_STEP_EASE }
+      : { duration: 0.55, ease: MOBILE_STEP_EASE };
+  const progressTransition = reducedMotion
+    ? { duration: 0 }
+    : isPhoneViewport
+      ? { type: "tween" as const, duration: 0.18, ease: MOBILE_PROGRESS_EASE }
+      : { type: "spring" as const, stiffness: 170, damping: 24 };
+  const surfacePaddingClass = mobileRailActive ? "pb-[6.75rem] sm:pb-7" : "pb-6 sm:pb-7";
+
+  const handleLeadFieldFocusChange = useCallback((focused: boolean) => {
+    setIsLeadFieldFocused(focused);
+  }, []);
 
   if (isBooting || !snapshot || !currentStep) {
     return (
       <div
         data-quiz-shell="monochrome"
         className={cn(
-          embedded ? `min-h-full overflow-x-hidden ${LIGHT_SHELL}` : `min-h-screen overflow-x-hidden ${LIGHT_SHELL}`,
+          embedded
+            ? `relative isolate min-h-full w-full max-w-full overflow-x-clip overscroll-x-none touch-pan-y ${LIGHT_SHELL}`
+            : `relative isolate min-h-screen w-full max-w-full overflow-x-clip overscroll-x-none touch-pan-y ${LIGHT_SHELL}`,
           className,
         )}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.92),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(17,17,17,0.08),transparent_28%),linear-gradient(180deg,#faf8f2_0%,#ebe5da_100%)]" />
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.92),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(17,17,17,0.08),transparent_28%),linear-gradient(180deg,#faf8f2_0%,#ebe5da_100%)]" />
+        </div>
         <div
           className={cn(
             "mx-auto flex max-w-[1160px] items-start justify-center px-4 py-6 sm:px-6",
@@ -695,18 +816,29 @@ export default function QuizExperience({
     <div
       data-quiz-shell="monochrome"
       className={cn(
-        embedded ? `min-h-full overflow-x-hidden ${LIGHT_SHELL}` : `min-h-screen overflow-x-hidden ${LIGHT_SHELL}`,
+        embedded
+          ? `relative isolate min-h-full w-full max-w-full overflow-x-clip overscroll-x-none touch-pan-y ${LIGHT_SHELL}`
+          : `relative isolate min-h-screen w-full max-w-full overflow-x-clip overscroll-x-none touch-pan-y ${LIGHT_SHELL}`,
         className,
       )}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.94),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(17,17,17,0.08),transparent_30%),linear-gradient(180deg,#faf8f2_0%,#ebe5da_100%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-70 [background-image:linear-gradient(rgba(17,17,17,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(17,17,17,0.045)_1px,transparent_1px)] [background-size:28px_28px] [mask-image:radial-gradient(circle_at_center,black,transparent_82%)]" />
-      <motion.div
-        aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-12 h-[26rem] w-[26rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.74),rgba(255,255,255,0))]"
-        animate={reducedMotion ? undefined : { scale: [1, 1.06, 1], opacity: [0.65, 0.9, 0.65] }}
-        transition={reducedMotion ? undefined : { duration: 7, repeat: Infinity, ease: "easeInOut" }}
-      />
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.94),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(17,17,17,0.08),transparent_30%),linear-gradient(180deg,#faf8f2_0%,#ebe5da_100%)]" />
+        <div className="absolute inset-0 opacity-70 [background-image:linear-gradient(rgba(17,17,17,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(17,17,17,0.045)_1px,transparent_1px)] [background-size:28px_28px] [mask-image:radial-gradient(circle_at_center,black,transparent_82%)]" />
+        {isPhoneViewport ? (
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-6 top-5 h-28 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.74),rgba(255,255,255,0))] blur-2xl"
+          />
+        ) : (
+          <motion.div
+            aria-hidden="true"
+            className="pointer-events-none absolute left-1/2 top-12 h-[26rem] w-[26rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.74),rgba(255,255,255,0))]"
+            animate={reducedMotion ? undefined : { scale: [1, 1.06, 1], opacity: [0.65, 0.9, 0.65] }}
+            transition={reducedMotion ? undefined : { duration: 7, repeat: Infinity, ease: "easeInOut" }}
+          />
+        )}
+      </div>
       <div
         className={cn(
           "relative mx-auto flex w-full max-w-[1160px] items-start justify-center px-4 pb-6 pt-4 sm:px-6 sm:py-6 lg:px-10",
@@ -715,9 +847,9 @@ export default function QuizExperience({
       >
         <div className="w-full max-w-[446px]">
           <motion.div
-            initial={reducedMotion ? undefined : { opacity: 0, y: 18, scale: 0.988 }}
-            animate={reducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
-            transition={reducedMotion ? undefined : { duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+            initial={reducedMotion ? undefined : isPhoneViewport ? { opacity: 0, y: 10 } : { opacity: 0, y: 18, scale: 0.988 }}
+            animate={reducedMotion ? undefined : isPhoneViewport ? { opacity: 1, y: 0 } : { opacity: 1, y: 0, scale: 1 }}
+            transition={shellTransition}
             className={LIGHT_PANEL}
           >
             <div className="border-b border-black/[0.08] px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
@@ -755,23 +887,13 @@ export default function QuizExperience({
                   className="h-full rounded-full bg-[#171614]"
                   initial={false}
                   animate={{ width: `${visibleProgress}%` }}
-                  transition={{
-                    type: reducedMotion ? "tween" : "spring",
-                    duration: reducedMotion ? 0 : undefined,
-                    stiffness: 170,
-                    damping: 24,
-                  }}
+                  transition={progressTransition}
                 />
                 <motion.div
                   className="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border border-white bg-[#171614] shadow-[0_0_0_4px_rgba(23,22,20,0.12)]"
                   initial={false}
                   animate={{ left: `calc(${progressIndicatorLeft}% - 6px)` }}
-                  transition={{
-                    type: reducedMotion ? "tween" : "spring",
-                    duration: reducedMotion ? 0 : undefined,
-                    stiffness: 170,
-                    damping: 24,
-                  }}
+                  transition={progressTransition}
                 />
               </div>
               </div>
@@ -779,7 +901,7 @@ export default function QuizExperience({
               <div
                 className={cn(
                   "relative px-5 pt-5 sm:min-h-[620px] sm:px-6 sm:pt-7",
-                  mobileRailActive ? "pb-[7.75rem] sm:pb-7" : "pb-6 sm:pb-7",
+                  surfacePaddingClass,
                 )}
               >
                 <AnimatePresence mode="wait">
@@ -787,8 +909,8 @@ export default function QuizExperience({
                     key={`${currentStep.id}:${snapshot.trail.length}`}
                     initial={stageMotion.initial}
                     animate={stageMotion.animate}
-                  exit={stageMotion.exit}
-                  transition={{ duration: reducedMotion ? 0 : 0.58, ease: [0.19, 1, 0.22, 1] }}
+                    exit={stageMotion.exit}
+                    transition={stageTransition}
                 >
                   <StepSurface
                     currentStep={currentStep}
@@ -801,6 +923,7 @@ export default function QuizExperience({
                     consent={resolvedConsent}
                     submissionError={resolvedSubmissionError}
                     reducedMotion={Boolean(reducedMotion)}
+                    isPhoneViewport={isPhoneViewport}
                     mobileRailActive={mobileRailActive}
                     leadStepReady={leadStepReady}
                     onAdvance={handleAdvance}
@@ -809,6 +932,7 @@ export default function QuizExperience({
                     onMultiSelectContinue={handleMultiSelectContinue}
                     onLeadFieldChange={handleLeadFieldChange}
                     onConsentChange={handleConsentChange}
+                    onLeadFieldFocusChange={handleLeadFieldFocusChange}
                     onLeadSubmit={handleLeadSubmit}
                     onOfferClick={handleOfferClick}
                   />
@@ -887,6 +1011,7 @@ function StepSurface({
   consent,
   submissionError,
   reducedMotion,
+  isPhoneViewport,
   mobileRailActive,
   leadStepReady,
   onAdvance,
@@ -895,6 +1020,7 @@ function StepSurface({
   onMultiSelectContinue,
   onLeadFieldChange,
   onConsentChange,
+  onLeadFieldFocusChange,
   onLeadSubmit,
   onOfferClick,
 }: {
@@ -908,6 +1034,7 @@ function StepSurface({
   consent: boolean;
   submissionError: string | null;
   reducedMotion: boolean;
+  isPhoneViewport: boolean;
   mobileRailActive: boolean;
   leadStepReady: boolean;
   onAdvance: () => void;
@@ -916,6 +1043,7 @@ function StepSurface({
   onMultiSelectContinue: () => void;
   onLeadFieldChange: (fieldId: string, value: string) => void;
   onConsentChange: (checked: boolean) => void;
+  onLeadFieldFocusChange: (focused: boolean) => void;
   onLeadSubmit: () => void;
   onOfferClick: () => void;
 }) {
@@ -925,6 +1053,7 @@ function StepSurface({
         <WelcomeStep
           step={currentStep}
           reducedMotion={reducedMotion}
+          isPhoneViewport={isPhoneViewport}
           mobileRailActive={mobileRailActive}
           onAdvance={onAdvance}
         />
@@ -935,6 +1064,7 @@ function StepSurface({
           step={currentStep}
           pendingOptionId={pendingOptionId}
           reducedMotion={reducedMotion}
+          isPhoneViewport={isPhoneViewport}
           selectedOptions={selectedOptions}
           onSingleSelect={onSingleSelect}
           onToggleOption={onToggleOption}
@@ -947,13 +1077,22 @@ function StepSurface({
           step={currentStep}
           adaptiveSignal={adaptiveSignal}
           reducedMotion={reducedMotion}
+          isPhoneViewport={isPhoneViewport}
           mobileRailActive={mobileRailActive}
           onAdvance={onAdvance}
         />
       ) : null}
 
       {currentStep.kind === "analysis" ? (
-        <AnalysisStep step={currentStep} onAdvance={onAdvance} reducedMotion={reducedMotion} />
+        <AnalysisStep
+          key={`${currentStep.id}:${isPhoneViewport ? "phone" : "desktop"}:${resultProfile.id}`}
+          step={currentStep}
+          adaptiveSignal={adaptiveSignal}
+          resultProfile={resultProfile}
+          onAdvance={onAdvance}
+          reducedMotion={reducedMotion}
+          isPhoneViewport={isPhoneViewport}
+        />
       ) : null}
 
       {currentStep.kind === "result" ? (
@@ -962,6 +1101,7 @@ function StepSurface({
           resultProfile={resultProfile}
           adaptiveSignal={adaptiveSignal}
           reducedMotion={reducedMotion}
+          isPhoneViewport={isPhoneViewport}
           mobileRailActive={mobileRailActive}
           onAdvance={onAdvance}
         />
@@ -975,9 +1115,11 @@ function StepSurface({
           leadValues={leadValues}
           consent={consent}
           isReady={leadStepReady}
+          isPhoneViewport={isPhoneViewport}
           mobileRailActive={mobileRailActive}
           onLeadFieldChange={onLeadFieldChange}
           onConsentChange={onConsentChange}
+          onLeadFieldFocusChange={onLeadFieldFocusChange}
           onLeadSubmit={onLeadSubmit}
         />
       ) : null}
@@ -986,6 +1128,7 @@ function StepSurface({
         <OfferStep
           step={currentStep}
           resultProfile={resultProfile}
+          isPhoneViewport={isPhoneViewport}
           mobileRailActive={mobileRailActive}
           onOfferClick={onOfferClick}
         />
@@ -1008,14 +1151,18 @@ function StepSurface({
 function WelcomeStep({
   step,
   reducedMotion,
+  isPhoneViewport,
   mobileRailActive,
   onAdvance,
 }: {
   step: Extract<QuizStep, { kind: "welcome" }>;
   reducedMotion: boolean;
+  isPhoneViewport: boolean;
   mobileRailActive: boolean;
   onAdvance: () => void;
 }) {
+  const cardEntranceAllowed = !reducedMotion && !isPhoneViewport;
+
   return (
     <div className="space-y-5">
       <div className="space-y-4">
@@ -1028,9 +1175,9 @@ function WelcomeStep({
         {step.trustPoints.map((point, index) => (
           <motion.div
             key={point}
-            initial={reducedMotion ? undefined : { opacity: 0, y: 16 }}
-            animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
-            transition={reducedMotion ? undefined : { duration: 0.32, delay: 0.08 * index }}
+            initial={cardEntranceAllowed ? { opacity: 0, y: 16 } : false}
+            animate={cardEntranceAllowed ? { opacity: 1, y: 0 } : undefined}
+            transition={cardEntranceAllowed ? { duration: 0.32, delay: 0.08 * index } : undefined}
             className={cn(SECONDARY_PANEL, "flex items-center gap-3 px-4 py-3")}
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-full border border-black/[0.08] bg-[#171614] text-white">
@@ -1051,8 +1198,8 @@ function WelcomeStep({
       <motion.button
         type="button"
         onClick={onAdvance}
-        whileTap={reducedMotion ? undefined : { scale: 0.992 }}
-        whileHover={reducedMotion ? undefined : { y: -2 }}
+        whileTap={reducedMotion ? undefined : { scale: isPhoneViewport ? 0.995 : 0.992 }}
+        whileHover={!reducedMotion && !isPhoneViewport ? { y: -2 } : undefined}
         className={cn(
           "group relative w-full items-center justify-between overflow-hidden rounded-[1.75rem] border border-[#171614] bg-[#171614] px-5 py-5 text-left text-white shadow-[0_24px_50px_rgba(23,22,20,0.16)]",
           inlineActionVisibilityClass(mobileRailActive),
@@ -1061,8 +1208,8 @@ function WelcomeStep({
         <motion.div
           aria-hidden="true"
           className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-[linear-gradient(90deg,rgba(255,255,255,0.18),rgba(255,255,255,0))]"
-          animate={reducedMotion ? undefined : { x: ["-100%", "220%"] }}
-          transition={reducedMotion ? undefined : { duration: 1.8, repeat: Infinity, repeatDelay: 1.2, ease: "easeInOut" }}
+          animate={!reducedMotion && !isPhoneViewport ? { x: ["-100%", "220%"] } : undefined}
+          transition={!reducedMotion && !isPhoneViewport ? { duration: 1.8, repeat: Infinity, repeatDelay: 1.2, ease: "easeInOut" } : undefined}
         />
         <div className="relative space-y-2">
           <p className="text-[11px] uppercase tracking-[0.3em] text-white/56">begin</p>
@@ -1082,6 +1229,7 @@ function QuestionStep({
   selectedOptions,
   pendingOptionId,
   reducedMotion,
+  isPhoneViewport,
   onSingleSelect,
   onToggleOption,
   onContinue,
@@ -1090,11 +1238,13 @@ function QuestionStep({
   selectedOptions: string[];
   pendingOptionId: string | null;
   reducedMotion: boolean;
+  isPhoneViewport: boolean;
   onSingleSelect: (optionId: string) => void;
   onToggleOption: (optionId: string) => void;
   onContinue: () => void;
 }) {
   const interactionLocked = step.selection === "single" && pendingOptionId !== null;
+  const optionEntranceAllowed = !reducedMotion && !isPhoneViewport;
 
   return (
     <div className="space-y-5">
@@ -1106,8 +1256,8 @@ function QuestionStep({
 
       {pendingOptionId ? (
         <motion.div
-          initial={reducedMotion ? undefined : { opacity: 0, y: 8 }}
-          animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+          initial={optionEntranceAllowed ? { opacity: 0, y: 8 } : false}
+          animate={optionEntranceAllowed ? { opacity: 1, y: 0 } : undefined}
           className="inline-flex w-fit items-center gap-2 rounded-full border border-black/[0.08] bg-white px-3 py-2 text-[11px] uppercase tracking-[0.28em] text-[#61594f]"
         >
           <Check className="h-3.5 w-3.5" strokeWidth={1.6} />
@@ -1128,13 +1278,13 @@ function QuestionStep({
               type="button"
               onClick={action}
               disabled={interactionLocked && !isSelected}
-              initial={reducedMotion ? undefined : { opacity: 0, y: 20, scale: 0.985 }}
-              animate={reducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
-              transition={reducedMotion ? undefined : { duration: 0.32, delay: index * 0.055, ease: [0.22, 1, 0.36, 1] }}
-              whileTap={interactionLocked ? undefined : { scale: 0.988 }}
-              whileHover={interactionLocked ? undefined : { y: -2 }}
+              initial={optionEntranceAllowed ? { opacity: 0, y: 10 } : false}
+              animate={optionEntranceAllowed ? { opacity: 1, y: 0 } : undefined}
+              transition={optionEntranceAllowed ? { duration: 0.18, ease: [0.22, 1, 0.36, 1] } : undefined}
+              whileTap={interactionLocked || reducedMotion ? undefined : { scale: isPhoneViewport ? 0.995 : 0.988 }}
+              whileHover={interactionLocked || isPhoneViewport ? undefined : { y: -2 }}
               className={cn(
-                "group relative w-full overflow-hidden rounded-[1.55rem] border px-4 py-3.5 text-left transition duration-300 sm:px-5 sm:py-4",
+                "group relative w-full overflow-hidden rounded-[1.55rem] border px-4 py-3.5 text-left transition duration-200 sm:px-5 sm:py-4",
                 isSelected ? OPTION_ACTIVE : OPTION_IDLE,
                 interactionLocked && !isSelected ? "opacity-60" : "",
               )}
@@ -1168,8 +1318,8 @@ function QuestionStep({
                     <p className={cn("text-base font-medium leading-6 tracking-[-0.02em] sm:text-lg", isSelected ? "text-white" : "text-[#171410]")}>
                       {option.label}
                     </p>
-                    <span className={cn("text-[10px] uppercase tracking-[0.28em] sm:text-xs", isSelected ? "text-white/54" : "text-[#8c8377]")}>
-                      {pendingOptionId === option.id ? "locked" : String(index + 1).padStart(2, "0")}
+                    <span className={cn("min-w-[2.25rem] text-right text-[10px] uppercase tracking-[0.28em] tabular-nums sm:text-xs", isSelected ? "text-white/54" : "text-[#8c8377]")}>
+                      {String(index + 1).padStart(2, "0")}
                     </span>
                   </div>
                   {option.description ? (
@@ -1206,18 +1356,21 @@ function MessageStep({
   step,
   adaptiveSignal,
   reducedMotion,
+  isPhoneViewport,
   mobileRailActive,
   onAdvance,
 }: {
   step: Extract<QuizStep, { kind: "message" }>;
   adaptiveSignal: AdaptiveSignalSummary;
   reducedMotion: boolean;
+  isPhoneViewport: boolean;
   mobileRailActive: boolean;
   onAdvance: () => void;
 }) {
   const primaryHighlight = step.highlights?.[0] ?? null;
   const supportingBullets = step.bullets?.slice(0, 2) ?? [];
   const extraBullets = step.bullets?.slice(2) ?? [];
+  const cardEntranceAllowed = !reducedMotion && !isPhoneViewport;
 
   return (
     <div className="space-y-5">
@@ -1231,9 +1384,9 @@ function MessageStep({
 
       {primaryHighlight ? (
         <motion.div
-          initial={reducedMotion ? undefined : { opacity: 0, y: 18 }}
-          animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
-          transition={reducedMotion ? undefined : { duration: 0.34 }}
+          initial={cardEntranceAllowed ? { opacity: 0, y: 18 } : false}
+          animate={cardEntranceAllowed ? { opacity: 1, y: 0 } : undefined}
+          transition={cardEntranceAllowed ? { duration: 0.34 } : undefined}
           className={cn(PREMIUM_PANEL, "space-y-3 px-4 py-4 sm:px-5")}
         >
           <p className="text-[11px] uppercase tracking-[0.3em] text-white/44">{primaryHighlight.label}</p>
@@ -1248,9 +1401,9 @@ function MessageStep({
           {supportingBullets.map((bullet, index) => (
             <motion.div
               key={bullet}
-              initial={reducedMotion ? undefined : { opacity: 0, x: -14 }}
-              animate={reducedMotion ? undefined : { opacity: 1, x: 0 }}
-              transition={reducedMotion ? undefined : { duration: 0.28, delay: 0.07 * index }}
+              initial={cardEntranceAllowed ? { opacity: 0, y: 8 } : false}
+              animate={cardEntranceAllowed ? { opacity: 1, y: 0 } : undefined}
+              transition={cardEntranceAllowed ? { duration: 0.24, delay: 0.05 * index } : undefined}
               className={cn(SECONDARY_PANEL, "flex gap-3 px-4 py-3")}
             >
               <div className="mt-1 flex h-6 w-6 flex-none items-center justify-center rounded-full border border-black/[0.08] bg-white">
@@ -1291,19 +1444,46 @@ function MessageStep({
 
 function AnalysisStep({
   step,
+  adaptiveSignal,
+  resultProfile,
   onAdvance,
   reducedMotion,
+  isPhoneViewport,
 }: {
   step: Extract<QuizStep, { kind: "analysis" }>;
+  adaptiveSignal: AdaptiveSignalSummary;
+  resultProfile: QuizResultProfile;
   onAdvance: () => void;
   reducedMotion: boolean;
+  isPhoneViewport: boolean;
 }) {
+  const stageDefinitions = useMemo(
+    () =>
+      isPhoneViewport
+        ? buildMobileAnalysisStages(adaptiveSignal, resultProfile)
+        : step.stages.map((stage) => ({
+            id: stage.id,
+            label: stage.label,
+            description: stage.description,
+            evidenceLabel: "stage",
+            evidenceValue: stage.label,
+          })),
+    [adaptiveSignal, isPhoneViewport, resultProfile, step.stages],
+  );
   const [activeStageIndex, setActiveStageIndex] = useState(0);
   const [completedStageIds, setCompletedStageIds] = useState<string[]>([]);
   const [isFinished, setIsFinished] = useState(false);
-  const stageCount = step.stages.length;
-  const activeStage = step.stages[Math.min(activeStageIndex, stageCount - 1)];
+  const stageCount = stageDefinitions.length;
+  const activeStage = stageDefinitions[Math.min(activeStageIndex, stageCount - 1)];
   const stageDurations = useMemo(() => {
+    if (isPhoneViewport) {
+      return stageDefinitions.map((_, index) =>
+        reducedMotion
+          ? 120
+          : MOBILE_ANALYSIS_STAGE_DURATIONS[index] ?? MOBILE_ANALYSIS_STAGE_DURATIONS.at(-1) ?? 1100,
+      );
+    }
+
     const originalTotalDuration = step.stages.reduce((total, stage) => total + stage.durationMs, 0) || 1;
     const compressedTotalDuration = reducedMotion
       ? stageCount * 60
@@ -1315,7 +1495,7 @@ function AnalysisStep({
         Math.round((stage.durationMs / originalTotalDuration) * compressedTotalDuration),
       ),
     );
-  }, [reducedMotion, stageCount, step.stages]);
+  }, [isPhoneViewport, reducedMotion, stageCount, stageDefinitions, step.stages]);
   const cumulativeDurations = useMemo(() => {
     const values: number[] = [];
     let durationCursor = 0;
@@ -1331,7 +1511,7 @@ function AnalysisStep({
   const activeStageDurationMs = stageDurations[activeStageIndex] ?? 0;
   const progressStartPercent = (activeStageStartMs / totalDurationMs) * 100;
   const progressEndPercent = isFinished ? 100 : (activeStageEndMs / totalDurationMs) * 100;
-  const stageProgressLabel = isFinished ? "locked" : "running";
+  const stageProgressLabel = isFinished ? "complete" : isPhoneViewport ? "resolving" : "running";
 
   useEffect(() => {
     let stageTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1343,10 +1523,13 @@ function AnalysisStep({
         return;
       }
 
-      if (index >= step.stages.length) {
+      if (index >= stageDefinitions.length) {
         setIsFinished(true);
         if (step.autoAdvance) {
-          finishTimer = setTimeout(() => onAdvance(), reducedMotion ? 0 : 140);
+          finishTimer = setTimeout(
+            () => onAdvance(),
+            reducedMotion ? 0 : isPhoneViewport ? MOBILE_ANALYSIS_COMPLETION_DELAY_MS : 140,
+          );
         }
         return;
       }
@@ -1356,7 +1539,7 @@ function AnalysisStep({
 
       stageTimer = setTimeout(() => {
         setCompletedStageIds((current) =>
-          current.includes(step.stages[index].id) ? current : [...current, step.stages[index].id],
+          current.includes(stageDefinitions[index].id) ? current : [...current, stageDefinitions[index].id],
         );
         runStage(index + 1);
       }, durationMs);
@@ -1373,7 +1556,112 @@ function AnalysisStep({
         clearTimeout(finishTimer);
       }
     };
-  }, [onAdvance, reducedMotion, stageDurations, step]);
+  }, [isPhoneViewport, onAdvance, reducedMotion, stageDefinitions, stageDurations, step.autoAdvance]);
+
+  if (isPhoneViewport) {
+    return (
+      <div className="space-y-5">
+        <div className="space-y-4">
+          {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
+          <h1 className={STEP_TITLE}>{step.title}</h1>
+          {step.body ? <p className={STEP_BODY}>{step.body}</p> : null}
+        </div>
+
+        <div className={cn(LIGHT_INSET, "overflow-hidden p-4")}>
+          <div className="rounded-[1.45rem] border border-black/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,243,238,0.96))] p-4 shadow-[0_18px_44px_rgba(23,22,20,0.06)]">
+            <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.28em] text-[#7f776d]">
+              <span>profile analysis</span>
+              <span>{Math.round(progressEndPercent)}%</span>
+            </div>
+
+            <div className="mt-4 h-[5px] overflow-hidden rounded-full bg-black/[0.08]">
+              <motion.div
+                key={`mobile-analysis-progress-${isFinished ? "complete" : activeStage?.id ?? "analysis"}`}
+                className="h-full rounded-full bg-[#171614]"
+                initial={{ width: `${Math.max(progressStartPercent, 8)}%` }}
+                animate={{ width: `${Math.max(progressEndPercent, 14)}%` }}
+                transition={{
+                  duration: isFinished ? 0.2 : reducedMotion ? 0 : activeStageDurationMs / 1000,
+                  ease: "linear",
+                }}
+              />
+            </div>
+
+            <div className="mt-5 rounded-[1.2rem] border border-black/[0.07] bg-white/92 px-4 py-4" role="status" aria-live="polite" aria-atomic="true">
+              <p className="text-[11px] uppercase tracking-[0.28em] text-[#81796f]">
+                phase {Math.min(activeStageIndex + 1, stageCount)} of {stageCount}
+              </p>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeStage?.id ?? "mobile-analysis-finished"}
+                  initial={reducedMotion ? undefined : { opacity: 0, y: 6 }}
+                  animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+                  exit={reducedMotion ? undefined : { opacity: 0 }}
+                  transition={reducedMotion ? undefined : { duration: 0.18 }}
+                  className="mt-3"
+                >
+                  <p className="text-[1.12rem] font-semibold leading-[1.08] tracking-[-0.03em] text-[#171410]">
+                    {isFinished ? "your report is ready." : activeStage?.label ?? "finalizing your report"}
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-[#575149]">
+                    {isFinished
+                      ? "we locked the clearest pattern and staged the next move."
+                      : activeStage?.description ?? "finalizing your report"}
+                  </p>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            <div className="mt-4 grid gap-2.5">
+              {stageDefinitions.map((stage, index) => {
+                const isActive = index === activeStageIndex && !isFinished;
+                const isComplete = completedStageIds.includes(stage.id) || isFinished;
+
+                return (
+                  <div
+                    key={stage.id}
+                    className={cn(
+                      "flex items-start gap-3 rounded-[1.15rem] border px-3 py-3",
+                      isActive
+                        ? "border-[#171614] bg-white text-[#171410]"
+                        : isComplete
+                          ? "border-black/[0.08] bg-white text-[#171410]"
+                          : "border-black/[0.06] bg-[#f7f5ef] text-[#5c554d]",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full border",
+                        isActive || isComplete ? "border-black/[0.08] bg-[#171614] text-white" : "border-black/[0.08] bg-white",
+                      )}
+                    >
+                      {isComplete ? (
+                        <Check className="h-3.5 w-3.5 text-white" strokeWidth={1.2} />
+                      ) : isActive ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-white/80" strokeWidth={1.2} />
+                      ) : (
+                        <span className="h-2 w-2 rounded-full bg-[#171614]/20" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] uppercase tracking-[0.26em] text-[#877f74]">{stage.evidenceLabel}</p>
+                      <p className="mt-2 text-sm leading-6 text-current">{stage.evidenceValue}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {isFinished ? (
+              <p className="mt-4 text-center text-[10px] uppercase tracking-[0.28em] text-[#867e73]">
+                opening your report...
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -1464,7 +1752,7 @@ function AnalysisStep({
         </div>
 
         <div className="mt-4 grid gap-2">
-          {step.stages.map((stage, index) => {
+          {stageDefinitions.map((stage, index) => {
             const isActive = index === activeStageIndex && !isFinished;
             const isComplete = completedStageIds.includes(stage.id) || isFinished;
 
@@ -1522,6 +1810,7 @@ function ResultStep({
   resultProfile,
   adaptiveSignal,
   reducedMotion,
+  isPhoneViewport,
   mobileRailActive,
   onAdvance,
 }: {
@@ -1529,11 +1818,13 @@ function ResultStep({
   resultProfile: QuizResultProfile;
   adaptiveSignal: AdaptiveSignalSummary;
   reducedMotion: boolean;
+  isPhoneViewport: boolean;
   mobileRailActive: boolean;
   onAdvance: () => void;
 }) {
   const headlineCriteria = resultProfile.criteria.slice(0, 2);
   const headlineMetrics = resultProfile.metrics.slice(0, 2);
+  const cardEntranceAllowed = !reducedMotion && !isPhoneViewport;
 
   return (
     <div className="space-y-5">
@@ -1547,9 +1838,9 @@ function ResultStep({
       </div>
 
       <motion.div
-        initial={reducedMotion ? undefined : { opacity: 0, y: 16 }}
-        animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
-        transition={reducedMotion ? undefined : { duration: 0.35 }}
+        initial={cardEntranceAllowed ? { opacity: 0, y: 16 } : false}
+        animate={cardEntranceAllowed ? { opacity: 1, y: 0 } : undefined}
+        transition={cardEntranceAllowed ? { duration: 0.35 } : undefined}
         className={cn(LIGHT_INSET, "p-5 sm:p-6")}
       >
         <p className="text-[11px] uppercase tracking-[0.3em] text-[#80786e]">current read</p>
@@ -1574,9 +1865,9 @@ function ResultStep({
         {headlineCriteria.map((criterion, index) => (
           <motion.div
             key={criterion.id}
-            initial={reducedMotion ? undefined : { opacity: 0, x: -14 }}
-            animate={reducedMotion ? undefined : { opacity: 1, x: 0 }}
-            transition={reducedMotion ? undefined : { duration: 0.28, delay: 0.06 * index }}
+            initial={cardEntranceAllowed ? { opacity: 0, y: 8 } : false}
+            animate={cardEntranceAllowed ? { opacity: 1, y: 0 } : undefined}
+            transition={cardEntranceAllowed ? { duration: 0.24, delay: 0.05 * index } : undefined}
             className={cn(SECONDARY_PANEL, "px-4 py-3")}
           >
             <div className="flex items-center justify-between gap-3">
@@ -1658,9 +1949,11 @@ function LeadStep({
   leadValues,
   consent,
   isReady,
+  isPhoneViewport,
   mobileRailActive,
   onLeadFieldChange,
   onConsentChange,
+  onLeadFieldFocusChange,
   onLeadSubmit,
 }: {
   step: Extract<QuizStep, { kind: "lead" }>;
@@ -1669,9 +1962,11 @@ function LeadStep({
   leadValues: Record<string, string>;
   consent: boolean;
   isReady: boolean;
+  isPhoneViewport: boolean;
   mobileRailActive: boolean;
   onLeadFieldChange: (fieldId: string, value: string) => void;
   onConsentChange: (checked: boolean) => void;
+  onLeadFieldFocusChange: (focused: boolean) => void;
   onLeadSubmit: () => void;
 }) {
   return (
@@ -1688,26 +1983,14 @@ function LeadStep({
         customLead={`sending ${resultProfile.badge}`}
       />
 
-      <div className={cn(LIGHT_INSET, "space-y-4 p-4 sm:p-5")}>
-        {step.fields.map((field) => (
-          <LeadFieldInput
-            key={field.id}
-            field={field}
-            value={normalizeFieldValue(leadValues, field.id)}
-            onChange={(value) => onLeadFieldChange(field.id, value)}
-          />
-        ))}
-
-        <label className={cn(SECONDARY_PANEL, "flex items-start gap-3 px-4 py-4")}>
-          <input
-            checked={consent}
-            onChange={(event) => onConsentChange(event.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-black/20 bg-white text-[#171614] accent-[#171614]"
-            type="checkbox"
-          />
-          <span className="text-sm leading-6 text-[#5c554d]">{step.consentLabel}</span>
-        </label>
-      </div>
+      <LeadFormCard
+        step={step}
+        leadValues={leadValues}
+        consent={consent}
+        onLeadFieldChange={onLeadFieldChange}
+        onConsentChange={onConsentChange}
+        onLeadFieldFocusChange={onLeadFieldFocusChange}
+      />
 
       <Button
         disabled={!isReady}
@@ -1717,6 +2000,12 @@ function LeadStep({
         {step.submitLabel}
       </Button>
 
+      {isPhoneViewport && !mobileRailActive ? (
+        <p className="text-center text-[10px] uppercase tracking-[0.28em] text-[#877f74]">
+          finish the form, then send the report from here
+        </p>
+      ) : null}
+
       <p className="text-sm leading-6 text-[#7e766b]">{step.disclaimer}</p>
     </div>
   );
@@ -1725,11 +2014,13 @@ function LeadStep({
 function OfferStep({
   step,
   resultProfile,
+  isPhoneViewport,
   mobileRailActive,
   onOfferClick,
 }: {
   step: Extract<QuizStep, { kind: "offer" }>;
   resultProfile: QuizResultProfile;
+  isPhoneViewport: boolean;
   mobileRailActive: boolean;
   onOfferClick: () => void;
 }) {
@@ -1772,10 +2063,10 @@ function OfferStep({
       </div>
 
       {step.note ? (
-        <p className="hidden text-center text-xs uppercase tracking-[0.28em] text-[#857d73] sm:block">{step.note}</p>
+        <p className={cn("text-center text-xs uppercase tracking-[0.28em] text-[#857d73]", mobileRailActive ? "hidden sm:block" : "")}>{step.note}</p>
       ) : null}
       {step.guarantee ? (
-        <p className="text-center text-sm leading-6 text-[#6b645b]">{step.guarantee}</p>
+        <p className={cn("text-center text-sm leading-6 text-[#6b645b]", isPhoneViewport ? "pb-1" : "")}>{step.guarantee}</p>
       ) : null}
     </div>
   );
@@ -1797,10 +2088,10 @@ function MobileActionRail({
   onClick: () => void;
 }) {
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(env(safe-area-inset-bottom)+0.85rem)] sm:hidden">
-      <div className="pointer-events-auto mx-auto w-full max-w-[446px] rounded-[1.5rem] border border-black/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(244,240,232,0.96))] p-3 shadow-[0_-8px_40px_rgba(23,22,20,0.12)] backdrop-blur-xl">
+    <div data-mobile-dock="true" className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[env(safe-area-inset-bottom)] sm:hidden">
+      <div className="pointer-events-auto mx-auto w-full max-w-[446px] rounded-t-[1.35rem] border-x border-t border-black/[0.08] bg-[linear-gradient(180deg,rgba(250,247,240,0.98),rgba(244,240,232,0.98))] px-4 pb-3 pt-3 shadow-[0_-2px_18px_rgba(23,22,20,0.08)]">
         {caption ? (
-          <p className="px-1 pb-2 text-[10px] uppercase tracking-[0.28em] text-[#6f675d]">
+          <p className="truncate px-1 pb-2 text-[10px] uppercase tracking-[0.24em] text-[#6f675d]">
             {caption}
           </p>
         ) : null}
@@ -1809,13 +2100,13 @@ function MobileActionRail({
           <Button
             disabled={disabled}
             onClick={onClick}
-            className={cn(PRIMARY_BUTTON, "h-14 justify-between rounded-[1.2rem] px-5")}
+            className={cn(PRIMARY_BUTTON, "h-12 justify-between rounded-[1rem] px-4 shadow-[0_8px_18px_rgba(23,22,20,0.08)]")}
           >
             <span className="text-left">{label}</span>
             <ArrowRight className="h-4 w-4" strokeWidth={1.3} />
           </Button>
         ) : (
-          <Button asChild className={cn(PRIMARY_BUTTON, "h-14 justify-between rounded-[1.2rem] px-5")}>
+          <Button asChild className={cn(PRIMARY_BUTTON, "h-12 justify-between rounded-[1rem] px-4 shadow-[0_8px_18px_rgba(23,22,20,0.08)]")}>
             <a href={href} onClick={onClick} rel="noopener noreferrer" target="_blank">
               <span className="text-left">{label}</span>
               <ArrowRight className="h-4 w-4" strokeWidth={1.3} />
@@ -1861,6 +2152,61 @@ function AdaptiveCueCard({
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function LeadFormCard({
+  step,
+  leadValues,
+  consent,
+  onLeadFieldChange,
+  onConsentChange,
+  onLeadFieldFocusChange,
+}: {
+  step: Extract<QuizStep, { kind: "lead" }>;
+  leadValues: Record<string, string>;
+  consent: boolean;
+  onLeadFieldChange: (fieldId: string, value: string) => void;
+  onConsentChange: (checked: boolean) => void;
+  onLeadFieldFocusChange: (focused: boolean) => void;
+}) {
+  const formRef = useRef<HTMLDivElement | null>(null);
+
+  const handleBlurCapture = () => {
+    requestAnimationFrame(() => {
+      const activeElement = document.activeElement;
+      const stillInside =
+        activeElement instanceof HTMLElement && formRef.current?.contains(activeElement);
+      onLeadFieldFocusChange(Boolean(stillInside));
+    });
+  };
+
+  return (
+    <div
+      ref={formRef}
+      onFocusCapture={() => onLeadFieldFocusChange(true)}
+      onBlurCapture={handleBlurCapture}
+      className={cn(LIGHT_INSET, "space-y-4 p-4 sm:p-5")}
+    >
+      {step.fields.map((field) => (
+        <LeadFieldInput
+          key={field.id}
+          field={field}
+          value={normalizeFieldValue(leadValues, field.id)}
+          onChange={(value) => onLeadFieldChange(field.id, value)}
+        />
+      ))}
+
+      <label className={cn(SECONDARY_PANEL, "flex items-start gap-3 px-4 py-4")}>
+        <input
+          checked={consent}
+          onChange={(event) => onConsentChange(event.target.checked)}
+          className="mt-1 h-4 w-4 rounded border-black/20 bg-white text-[#171614] accent-[#171614]"
+          type="checkbox"
+        />
+        <span className="text-sm leading-6 text-[#5c554d]">{step.consentLabel}</span>
+      </label>
     </div>
   );
 }

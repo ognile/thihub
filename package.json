@@ -12,6 +12,7 @@
     "quiz:preview": "node --experimental-strip-types scripts/quiz-preview.mts",
     "quiz:publish": "node --experimental-strip-types scripts/quiz-publish.mts",
     "quiz:report": "node --experimental-strip-types scripts/quiz-report.mts",
+    "test:quiz:mobile": "node scripts/quiz-mobile-qa.mjs",
     "test:regression": "node scripts/regression-harness.mjs",
     "test:perf": "node scripts/perf-budget-check.mjs",
     "test:admin:visual": "node scripts/admin-visual-snapshots.mjs",
