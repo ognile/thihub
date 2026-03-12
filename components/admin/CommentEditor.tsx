@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { CommentData } from '@/components/FBComments';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,8 +9,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Sparkles, Check, X, ThumbsUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -34,15 +32,6 @@ export default function CommentEditor({ comments, onChange }: CommentEditorProps
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editForm, setEditForm] = useState<CommentData | null>(null);
 
-    useEffect(() => {
-        if (editingId) {
-            const comment = comments.find(c => c.id === editingId);
-            if (comment) setEditForm(comment);
-        } else {
-            setEditForm(null);
-        }
-    }, [editingId, comments]);
-
     const handleAdd = () => {
         const newId = `c${Date.now()}`;
         const randomProfile = MOCK_PROFILES[Math.floor(Math.random() * MOCK_PROFILES.length)];
@@ -58,17 +47,22 @@ export default function CommentEditor({ comments, onChange }: CommentEditorProps
         };
         onChange([...comments, newComment]);
         setEditingId(newId);
+        setEditForm(newComment);
     };
 
     const handleDelete = (id: string) => {
         onChange(comments.filter(c => c.id !== id));
-        if (editingId === id) setEditingId(null);
+        if (editingId === id) {
+            setEditingId(null);
+            setEditForm(null);
+        }
     };
 
     const handleSave = () => {
         if (editForm) {
             onChange(comments.map(c => c.id === editForm.id ? editForm : c));
             setEditingId(null);
+            setEditForm(null);
         }
     };
 
@@ -168,7 +162,13 @@ export default function CommentEditor({ comments, onChange }: CommentEditorProps
                                     <Check className="h-4 w-4 mr-1" />
                                     Save
                                 </Button>
-                                <Button variant="outline" onClick={() => setEditingId(null)}>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setEditingId(null);
+                                        setEditForm(null);
+                                    }}
+                                >
                                     <X className="h-4 w-4" />
                                 </Button>
                             </div>
@@ -180,7 +180,10 @@ export default function CommentEditor({ comments, onChange }: CommentEditorProps
                             {comments.map((comment) => (
                                 <div
                                     key={comment.id}
-                                    onClick={() => setEditingId(comment.id)}
+                                    onClick={() => {
+                                        setEditingId(comment.id);
+                                        setEditForm(comment);
+                                    }}
                                     className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors group"
                                 >
                                     <Avatar className="h-10 w-10">
@@ -194,8 +197,9 @@ export default function CommentEditor({ comments, onChange }: CommentEditorProps
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                        className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
                                         onClick={(e) => { e.stopPropagation(); handleDelete(comment.id); }}
+                                        aria-label={`Delete comment by ${comment.author}`}
                                     >
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
@@ -203,7 +207,7 @@ export default function CommentEditor({ comments, onChange }: CommentEditorProps
                             ))}
                             {comments.length === 0 && (
                                 <div className="text-center py-8 text-muted-foreground">
-                                    <p className="text-sm">No comments yet. Click "Add Comment" to start.</p>
+                                    <p className="text-sm">No comments yet. Click Add Comment to start.</p>
                                 </div>
                             )}
                         </div>

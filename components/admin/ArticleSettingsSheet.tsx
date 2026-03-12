@@ -1,273 +1,438 @@
 import React, { useState } from 'react';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { toast } from 'sonner';
+import { Sheet } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import { ShieldCheck, BarChart3, Globe, Plus, Settings } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { BarChart3, Copy, Globe, Settings, ShieldCheck } from 'lucide-react';
 import { useAdminSettings } from '@/hooks/useAdminSettings';
 import GlobalSettingsSheet from '@/components/admin/GlobalSettingsSheet';
-import { cn } from '@/lib/utils';
+import AdminStateView from '@/components/admin/ui/AdminStateView';
+import AdminSheetScaffold from '@/components/admin/ui/AdminSheetScaffold';
+import type { ArticleBlock, HeroMetaV1, StylePreset } from '@/lib/articles/schema';
 
 interface Article {
-    slug: string;
-    title: string;
-    subtitle: string;
-    content: string;
-    author: string;
-    reviewer: string;
-    date: string;
-    image: string;
-    ctaText?: string;
-    ctaTitle?: string;
-    ctaDescription?: string;
-    ctaUrl?: string;
-    pixelId?: string;
-    keyTakeaways?: { title: string; content: string }[] | null;
-    comments?: any[];
-    stickyCTAEnabled?: boolean;
-    stickyCTAText?: string;
-    stickyCTAPrice?: string;
-    stickyCTAOriginalPrice?: string;
-    stickyCTAProductName?: string;
-    articleTheme?: 'v1' | 'v2';
+  slug: string;
+  title: string;
+  subtitle: string;
+  content: string;
+  contentBlocks: ArticleBlock[];
+  contentSchemaVersion: number;
+  stylePreset: StylePreset;
+  author: string;
+  reviewer: string;
+  date: string;
+  image: string;
+  authorImage?: string | null;
+  heroMeta: HeroMetaV1;
+  ctaText?: string;
+  ctaTitle?: string;
+  ctaDescription?: string;
+  ctaUrl?: string;
+  pixelId?: string;
+  keyTakeaways?: { title: string; content: string }[] | null;
+  comments?: unknown[];
+  stickyCTAEnabled?: boolean;
+  stickyCTAText?: string;
+  stickyCTAPrice?: string;
+  stickyCTAOriginalPrice?: string;
+  stickyCTAProductName?: string;
 }
 
 interface ArticleSettingsSheetProps {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    article: Article;
-    setArticle: React.Dispatch<React.SetStateAction<Article>>;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  article: Article;
+  setArticle: React.Dispatch<React.SetStateAction<Article>>;
+}
+
+async function copyValue(value: string, label: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success(`${label} copied`);
+  } catch {
+    toast.error(`Failed to copy ${label.toLowerCase()}`);
+  }
+}
+
+function SelectedValueRow({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string;
+}) {
+  if (!value) {
+    return (
+      <p className="text-xs text-muted-foreground">Using default {label.toLowerCase()}.</p>
+    );
+  }
+
+  return (
+    <div className="admin-row grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-[var(--admin-outline-soft)] px-3 py-2.5">
+      <div className="min-w-0">
+        <p className="admin-value truncate text-xs text-muted-foreground" title={value}>
+          {value}
+        </p>
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+        onClick={() => copyValue(value, label)}
+      >
+        <Copy className="h-3.5 w-3.5" />
+        Copy
+      </Button>
+    </div>
+  );
 }
 
 export default function ArticleSettingsSheet({ open, onOpenChange, article, setArticle }: ArticleSettingsSheetProps) {
-    const { pixels, ctaUrls, isLoading } = useAdminSettings();
-    const [isGlobalSettingsOpen, setIsGlobalSettingsOpen] = useState(false);
+  const { pixels, ctaUrls, isLoading, error, refresh } = useAdminSettings();
+  const [isGlobalSettingsOpen, setIsGlobalSettingsOpen] = useState(false);
 
-    return (
-        <>
-            <Sheet open={open} onOpenChange={onOpenChange}>
-                <SheetContent className="w-[400px] sm:w-[600px] sm:max-w-[600px] overflow-y-auto backdrop-blur-sm bg-white/95">
-                    <SheetHeader>
-                        <SheetTitle>Article Settings</SheetTitle>
-                        <SheetDescription>
-                            Configure tracking, CTA, and page settings.
-                        </SheetDescription>
-                    </SheetHeader>
+  const selectedPixel = pixels.find((pixel) => pixel.pixel_id === article.pixelId);
+  const selectedCta = ctaUrls.find((cta) => cta.url === article.ctaUrl);
+  const ctaSelectValue =
+    selectedCta?.id ?? (article.ctaUrl ? 'custom' : 'default');
 
-                    <div className="py-6 space-y-8">
-                        {/* Tracking Configuration */}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-sm font-semibold flex items-center gap-2">
-                                    <BarChart3 className="w-4 h-4 text-primary" />
-                                    Tracking & Destination
-                                </h3>
-                                <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="h-8 text-xs text-muted-foreground hover:text-primary"
-                                    onClick={() => setIsGlobalSettingsOpen(true)}
-                                >
-                                    <Settings className="w-3 h-3 mr-1" />
-                                    Manage Global Config
-                                </Button>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 gap-4">
-                                <div className="space-y-2">
-                                    <Label className="text-xs font-medium text-muted-foreground">Pixel ID</Label>
-                                    <div className="flex gap-2">
-                                        <Select 
-                                            value={article.pixelId || "default"} 
-                                            onValueChange={(val) => setArticle(prev => ({ ...prev, pixelId: val === "default" ? "" : val }))}
-                                        >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue placeholder="Select a pixel..." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="default">Use Default</SelectItem>
-                                                {pixels.map(pixel => (
-                                                    <SelectItem key={pixel.id} value={pixel.pixel_id}>
-                                                        {pixel.name} ({pixel.pixel_id})
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <Button size="icon" variant="outline" onClick={() => setIsGlobalSettingsOpen(true)}>
-                                            <Plus className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                </div>
+  return (
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <AdminSheetScaffold
+          title="Article Settings"
+          description="Configure tracking, destination, and article metadata."
+        >
+          <section className="admin-section space-y-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-[var(--admin-text-strong)]">
+                <BarChart3 className="h-4 w-4" />
+                Tracking &amp; Destination
+              </h3>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 px-3 text-xs"
+                onClick={() => setIsGlobalSettingsOpen(true)}
+              >
+                <Settings className="h-3.5 w-3.5" />
+                Manage Global Config
+              </Button>
+            </div>
 
-                                <div className="space-y-2">
-                                    <Label className="text-xs font-medium text-muted-foreground">CTA URL</Label>
-                                    <div className="flex gap-2">
-                                        <Select 
-                                            value={ctaUrls.find(u => u.url === article.ctaUrl)?.id || (article.ctaUrl ? "custom" : "default")} 
-                                            onValueChange={(val) => {
-                                                if (val === "default") {
-                                                    setArticle(prev => ({ ...prev, ctaUrl: "" }));
-                                                } else if (val === "custom") {
-                                                    // Do nothing, let input handle it
-                                                } else {
-                                                    const selected = ctaUrls.find(u => u.id === val);
-                                                    if (selected) {
-                                                        setArticle(prev => ({ ...prev, ctaUrl: selected.url }));
-                                                    }
-                                                }
-                                            }}
-                                        >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue placeholder="Select a URL..." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="default">Use Default</SelectItem>
-                                                {article.ctaUrl && !ctaUrls.find(u => u.url === article.ctaUrl) && (
-                                                    <SelectItem value="custom">Custom URL</SelectItem>
-                                                )}
-                                                {ctaUrls.map(url => (
-                                                    <SelectItem key={url.id} value={url.id}>
-                                                        {url.name}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <Button size="icon" variant="outline" onClick={() => setIsGlobalSettingsOpen(true)}>
-                                            <Plus className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                    {/* Fallback input for custom URL or viewing the raw value */}
-                                    <Input 
-                                        value={article.ctaUrl || ''} 
-                                        onChange={(e) => setArticle(prev => ({ ...prev, ctaUrl: e.target.value }))}
-                                        placeholder="https://..."
-                                        className="mt-2 font-mono text-xs"
-                                    />
-                                </div>
-                            </div>
-                        </div>
+            {isLoading ? (
+              <AdminStateView state="loading" title="Loading tracking settings" />
+            ) : error ? (
+              <AdminStateView
+                state="error"
+                title="Unable to load tracking settings"
+                description={error}
+                actionLabel="Retry"
+                onAction={refresh}
+              />
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="admin-field-label">Pixel ID</Label>
+                  <Select
+                    value={article.pixelId || 'default'}
+                    onValueChange={(value) =>
+                      setArticle((prev) => ({
+                        ...prev,
+                        pixelId: value === 'default' ? '' : value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Select a pixel..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Use Default</SelectItem>
+                      {pixels.map((pixel) => (
+                        <SelectItem key={pixel.id} value={pixel.pixel_id}>
+                          {pixel.name} ({pixel.pixel_id})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <SelectedValueRow label="Pixel ID" value={selectedPixel?.pixel_id || article.pixelId} />
+                </div>
 
-                        <Separator />
+                <div className="space-y-2">
+                  <Label className="admin-field-label">CTA URL</Label>
+                  <Select
+                    value={ctaSelectValue}
+                    onValueChange={(value) => {
+                      if (value === 'default') {
+                        setArticle((prev) => ({ ...prev, ctaUrl: '' }));
+                        return;
+                      }
 
-                        {/* Sticky CTA Settings */}
-                        <div className="space-y-4">
-                            <h3 className="text-sm font-semibold flex items-center gap-2">
-                                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                                Sticky CTA Bar
-                            </h3>
-                            
-                            <div className="p-4 rounded-lg border bg-muted/30 space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <Label htmlFor="sticky-enabled" className="cursor-pointer">Enable Sticky CTA</Label>
-                                    <div className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                            id="sticky-enabled"
-                                            type="checkbox"
-                                            checked={article.stickyCTAEnabled || false}
-                                            onChange={(e) => setArticle(prev => ({ ...prev, stickyCTAEnabled: e.target.checked }))}
-                                            className="sr-only peer"
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                                    </div>
-                                </div>
+                      if (value === 'custom') {
+                        return;
+                      }
 
-                                {article.stickyCTAEnabled && (
-                                    <div className="grid grid-cols-2 gap-4 pt-2">
-                                        <div className="col-span-2 space-y-1">
-                                            <Label className="text-xs">Product Name</Label>
-                                            <Input
-                                                value={article.stickyCTAProductName || ''}
-                                                onChange={(e) => setArticle(prev => ({ ...prev, stickyCTAProductName: e.target.value }))}
-                                                placeholder="e.g., Gut Health Formula"
-                                                className="h-8"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">Button Text</Label>
-                                            <Input
-                                                value={article.stickyCTAText || 'Try Risk-Free'}
-                                                onChange={(e) => setArticle(prev => ({ ...prev, stickyCTAText: e.target.value }))}
-                                                className="h-8"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">Price</Label>
-                                            <Input
-                                                value={article.stickyCTAPrice || ''}
-                                                onChange={(e) => setArticle(prev => ({ ...prev, stickyCTAPrice: e.target.value }))}
-                                                placeholder="$49.99"
-                                                className="h-8"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">Original Price</Label>
-                                            <Input
-                                                value={article.stickyCTAOriginalPrice || ''}
-                                                onChange={(e) => setArticle(prev => ({ ...prev, stickyCTAOriginalPrice: e.target.value }))}
-                                                placeholder="$79.99"
-                                                className="h-8"
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+                      const selected = ctaUrls.find((cta) => cta.id === value);
+                      if (selected) {
+                        setArticle((prev) => ({ ...prev, ctaUrl: selected.url }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Select a URL..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Use Default</SelectItem>
+                      {article.ctaUrl && !selectedCta ? <SelectItem value="custom">Custom URL</SelectItem> : null}
+                      {ctaUrls.map((urlItem) => (
+                        <SelectItem key={urlItem.id} value={urlItem.id}>
+                          {urlItem.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={article.ctaUrl || ''}
+                    onChange={(event) => setArticle((prev) => ({ ...prev, ctaUrl: event.target.value }))}
+                    placeholder="https://..."
+                    className="h-9 font-mono text-xs"
+                  />
+                  <SelectedValueRow label="CTA URL" value={article.ctaUrl} />
+                </div>
+              </div>
+            )}
+          </section>
 
-                        <Separator />
+          <section className="admin-section space-y-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-[var(--admin-text-strong)]">
+                <ShieldCheck className="h-4 w-4" />
+                Sticky CTA
+              </h3>
+            </div>
 
-                        {/* General Info */}
-                        <div className="space-y-4">
-                            <h3 className="text-sm font-semibold flex items-center gap-2">
-                                <Globe className="w-4 h-4 text-blue-500" />
-                                General Information
-                            </h3>
-                            
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Slug</Label>
-                                    <Input
-                                        value={article.slug}
-                                        disabled
-                                        className="h-8 bg-muted font-mono"
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Date</Label>
-                                    <Input
-                                        value={article.date}
-                                        onChange={(e) => setArticle(prev => ({ ...prev, date: e.target.value }))}
-                                        className="h-8"
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Author</Label>
-                                    <Input
-                                        value={article.author}
-                                        onChange={(e) => setArticle(prev => ({ ...prev, author: e.target.value }))}
-                                        className="h-8"
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Reviewer</Label>
-                                    <Input
-                                        value={article.reviewer}
-                                        onChange={(e) => setArticle(prev => ({ ...prev, reviewer: e.target.value }))}
-                                        className="h-8"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </SheetContent>
-            </Sheet>
+            <div className="space-y-4">
+              <div className="admin-row grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-[var(--admin-outline-soft)] px-3 py-2.5">
+                <div className="space-y-1">
+                  <Label htmlFor="sticky-enabled" className="text-sm font-medium text-[var(--admin-text-strong)]">
+                    Enable Sticky CTA
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Show a persistent CTA bar at the bottom of the article.
+                  </p>
+                </div>
+                <Switch
+                  id="sticky-enabled"
+                  checked={article.stickyCTAEnabled || false}
+                  onCheckedChange={(checked) => setArticle((prev) => ({ ...prev, stickyCTAEnabled: checked }))}
+                />
+              </div>
 
-            <GlobalSettingsSheet 
-                open={isGlobalSettingsOpen} 
-                onOpenChange={setIsGlobalSettingsOpen} 
-            />
-        </>
-    );
+              {article.stickyCTAEnabled ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label className="admin-field-label">Product Name</Label>
+                    <Input
+                      value={article.stickyCTAProductName || ''}
+                      onChange={(event) => setArticle((prev) => ({ ...prev, stickyCTAProductName: event.target.value }))}
+                      placeholder="e.g., Gut Health Formula"
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="admin-field-label">Button Text</Label>
+                    <Input
+                      value={article.stickyCTAText || 'Try Risk-Free'}
+                      onChange={(event) => setArticle((prev) => ({ ...prev, stickyCTAText: event.target.value }))}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="admin-field-label">Price</Label>
+                    <Input
+                      value={article.stickyCTAPrice || ''}
+                      onChange={(event) => setArticle((prev) => ({ ...prev, stickyCTAPrice: event.target.value }))}
+                      placeholder="$49.99"
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="admin-field-label">Original Price</Label>
+                    <Input
+                      value={article.stickyCTAOriginalPrice || ''}
+                      onChange={(event) =>
+                        setArticle((prev) => ({
+                          ...prev,
+                          stickyCTAOriginalPrice: event.target.value,
+                        }))
+                      }
+                      placeholder="$79.99"
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="admin-section space-y-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-[var(--admin-text-strong)]">
+                <Globe className="h-4 w-4" />
+                General Information
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="admin-field-label">Slug</Label>
+                <Input value={article.slug} disabled className="h-9 bg-muted font-mono text-xs" />
+              </div>
+              <div className="space-y-2">
+                <Label className="admin-field-label">Date</Label>
+                <Input
+                  value={article.date}
+                  onChange={(event) => setArticle((prev) => ({ ...prev, date: event.target.value }))}
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="admin-field-label">Author</Label>
+                <Input
+                  value={article.author}
+                  onChange={(event) => setArticle((prev) => ({ ...prev, author: event.target.value }))}
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="admin-field-label">Reviewer</Label>
+                <Input
+                  value={article.reviewer}
+                  onChange={(event) => setArticle((prev) => ({ ...prev, reviewer: event.target.value }))}
+                  className="h-9"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="admin-section space-y-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-[var(--admin-text-strong)]">
+                <ShieldCheck className="h-4 w-4" />
+                Hero Presentation
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="admin-field-label">Report Label</Label>
+                <Input
+                  value={article.heroMeta.reportLabel}
+                  onChange={(event) =>
+                    setArticle((prev) => ({
+                      ...prev,
+                      heroMeta: { ...prev.heroMeta, reportLabel: event.target.value },
+                    }))
+                  }
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="admin-field-label">Fact Checked Label</Label>
+                <Input
+                  value={article.heroMeta.factCheckedLabel}
+                  onChange={(event) =>
+                    setArticle((prev) => ({
+                      ...prev,
+                      heroMeta: { ...prev.heroMeta, factCheckedLabel: event.target.value },
+                    }))
+                  }
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="admin-field-label">Medically Reviewed Label</Label>
+                <Input
+                  value={article.heroMeta.medicallyReviewedLabel}
+                  onChange={(event) =>
+                    setArticle((prev) => ({
+                      ...prev,
+                      heroMeta: { ...prev.heroMeta, medicallyReviewedLabel: event.target.value },
+                    }))
+                  }
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="admin-field-label">Read Time Mode</Label>
+                <Select
+                  value={article.heroMeta.readTimeMode}
+                  onValueChange={(value) =>
+                    setArticle((prev) => ({
+                      ...prev,
+                      heroMeta: {
+                        ...prev.heroMeta,
+                        readTimeMode: value === 'override' ? 'override' : 'auto',
+                        readTimeOverrideMinutes:
+                          value === 'override' ? prev.heroMeta.readTimeOverrideMinutes : null,
+                      },
+                    }))
+                  }
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto</SelectItem>
+                    <SelectItem value="override">Override</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="admin-field-label">Read Time Override (minutes)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={article.heroMeta.readTimeOverrideMinutes ?? ''}
+                  onChange={(event) => {
+                    const parsed = Number.parseInt(event.target.value, 10);
+                    setArticle((prev) => ({
+                      ...prev,
+                      heroMeta: {
+                        ...prev.heroMeta,
+                        readTimeOverrideMinutes:
+                          Number.isFinite(parsed) && parsed > 0 ? parsed : null,
+                      },
+                    }));
+                  }}
+                  disabled={article.heroMeta.readTimeMode !== 'override'}
+                  className="h-9"
+                  placeholder="5"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="admin-field-label">Author Image URL</Label>
+                <Input
+                  value={article.authorImage || ''}
+                  onChange={(event) =>
+                    setArticle((prev) => ({
+                      ...prev,
+                      authorImage: event.target.value || null,
+                    }))
+                  }
+                  className="h-9"
+                  placeholder="https://..."
+                />
+              </div>
+            </div>
+          </section>
+        </AdminSheetScaffold>
+      </Sheet>
+
+      <GlobalSettingsSheet open={isGlobalSettingsOpen} onOpenChange={setIsGlobalSettingsOpen} />
+    </>
+  );
 }
-

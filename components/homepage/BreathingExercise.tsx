@@ -6,22 +6,21 @@ import { Play, Pause } from 'lucide-react';
 
 type Technique = '4-4-4' | '4-7-8';
 
+const TECHNIQUE_TIMINGS: Record<Technique, { inhale: number; hold: number; exhale: number }> = {
+    '4-4-4': { inhale: 4, hold: 4, exhale: 4 },
+    '4-7-8': { inhale: 4, hold: 7, exhale: 8 },
+};
+
 export default function BreathingExercise() {
     const [isActive, setIsActive] = useState(false);
     const [technique, setTechnique] = useState<Technique>('4-4-4');
     const [phase, setPhase] = useState<'inhale' | 'hold' | 'exhale'>('inhale');
     const [cycles, setCycles] = useState(0);
 
-    const timings = {
-        '4-4-4': { inhale: 4, hold: 4, exhale: 4 },
-        '4-7-8': { inhale: 4, hold: 7, exhale: 8 },
-    };
-
     useEffect(() => {
         if (!isActive) return;
 
-        const currentTimings = timings[technique];
-        let timer: NodeJS.Timeout;
+        const currentTimings = TECHNIQUE_TIMINGS[technique];
 
         const duration =
             phase === 'inhale'
@@ -30,7 +29,7 @@ export default function BreathingExercise() {
                     ? currentTimings.hold
                     : currentTimings.exhale;
 
-        timer = setTimeout(() => {
+        const timer = setTimeout(() => {
             if (phase === 'inhale') {
                 setPhase('hold');
             } else if (phase === 'hold') {
@@ -91,7 +90,7 @@ export default function BreathingExercise() {
                                     scale: isActive ? getCircleScale() : 1,
                                 }}
                                 transition={{
-                                    duration: phase === 'inhale' ? timings[technique].inhale : phase === 'hold' ? timings[technique].hold : timings[technique].exhale,
+                                    duration: phase === 'inhale' ? TECHNIQUE_TIMINGS[technique].inhale : phase === 'hold' ? TECHNIQUE_TIMINGS[technique].hold : TECHNIQUE_TIMINGS[technique].exhale,
                                     ease: 'easeInOut',
                                 }}
                             >

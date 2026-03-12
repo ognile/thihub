@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# thihub
 
-## Getting Started
+next.js app-router newsroom stack for top health insider. the app includes the public site, the authenticated admin/editor surface, quiz funnel tooling, and operational scripts for regression, performance, and usage monitoring.
 
-First, run the development server:
+## stack
+
+- next.js 16
+- react 19
+- typescript
+- tailwind v4
+- supabase
+- gemini
+
+## local setup
+
+install dependencies with `npm install`.
+
+required runtime secrets live in `/Users/nikitalienov/Documents/thihub/.env.local`. do not print or commit secret values. the app typically expects:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `GEMINI_API_KEY`
+- `NEXT_PUBLIC_SITE_URL`
+- `THIHUB_*` service and postgres credentials
+
+run the dev server with:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## verification
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+repo-wide guardrails are enforced through one canonical command:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run verify:repo
+```
 
-## Learn More
+that command runs lint, build, starts the production server locally, executes regression/perf/admin geometry checks, and runs `npm audit --omit=dev`. it writes runtime logs to `ops/reports/verify-repo/`, which is ignored by git.
 
-To learn more about Next.js, take a look at the following resources:
+if you need the authenticated admin visual snapshot suite as part of a release:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+VERIFY_ADMIN_VISUAL=1 PORT=3100 npm run verify:repo
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+you can also run individual checks directly:
 
-## Deploy on Vercel
+```bash
+npm run lint
+npm run build
+BASE_URL=http://127.0.0.1:3000 npm run test:regression
+BASE_URL=http://127.0.0.1:3000 npm run test:perf
+BASE_URL=http://127.0.0.1:3000 npm run test:admin:geometry
+BASE_URL=http://127.0.0.1:3000 npm run test:admin:visual
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## deployment
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+for any code change, the required flow is:
+
+1. pass local verification.
+2. commit and push the branch.
+3. wait for deployment to finish.
+4. verify the live behavior on [news.tophealthinsider.com](https://news.tophealthinsider.com).
+
+rollback guidance lives in [/Users/nikitalienov/Documents/thihub/docs/ROLLBACK_RUNBOOK.md](/Users/nikitalienov/Documents/thihub/docs/ROLLBACK_RUNBOOK.md).
+
+## operations
+
+usage monitoring commands:
+
+```bash
+npm run ops:usage:snapshot
+npm run ops:usage:check
+```
+
+generated operational artifacts under `ops/reports/`, `ops/visual-snapshots/`, and `ops/usage-snapshots/*.json` are reproducible outputs and should not be committed.

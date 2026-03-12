@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Quote } from 'lucide-react';
@@ -58,12 +59,11 @@ export default function VoicesCarousel() {
         const scrollContainer = scrollRef.current;
         if (!scrollContainer) return;
 
-        let scrollSpeed = hoveredIndex !== null ? 0.2 : 1;
-        let scrollPosition = 0;
+        const scrollSpeed = hoveredIndex !== null ? 0.2 : 1;
+        let scrollPosition = scrollContainer.scrollLeft;
+        let frameId = 0;
 
         const animate = () => {
-            if (!scrollContainer) return;
-
             scrollPosition += scrollSpeed;
 
             if (scrollPosition >= scrollContainer.scrollWidth / 2) {
@@ -71,12 +71,12 @@ export default function VoicesCarousel() {
             }
 
             scrollContainer.scrollLeft = scrollPosition;
-            requestAnimationFrame(animate);
+            frameId = requestAnimationFrame(animate);
         };
 
-        const animationId = requestAnimationFrame(animate);
+        frameId = requestAnimationFrame(animate);
 
-        return () => cancelAnimationFrame(animationId);
+        return () => cancelAnimationFrame(frameId);
     }, [hoveredIndex]);
 
     return (
@@ -115,10 +115,13 @@ export default function VoicesCarousel() {
                             whileHover={{ scale: 1.05 }}
                             transition={{ duration: 0.3 }}
                         >
-                            <img
+                            <Image
+                                unoptimized
                                 src={voice.image}
                                 alt={voice.name}
-                                className="w-full h-full object-cover"
+                                fill
+                                sizes="320px"
+                                className="object-cover"
                             />
 
                             {/* Gradient Overlay */}
@@ -142,7 +145,7 @@ export default function VoicesCarousel() {
                                     <div className="bg-white rounded-xl p-6 shadow-2xl max-w-xs">
                                         <Quote className="w-8 h-8 text-pink-600 mb-3" />
                                         <p className="text-gray-800 leading-relaxed text-sm italic">
-                                            "{voice.quote}"
+                                            &ldquo;{voice.quote}&rdquo;
                                         </p>
                                         <p className="text-right text-sm font-bold text-gray-900 mt-3">
                                             — {voice.name}

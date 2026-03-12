@@ -99,7 +99,7 @@ export default function MythBuster() {
                                             Common Myth
                                         </div>
                                         <p className="text-2xl md:text-3xl font-serif font-bold text-white leading-tight">
-                                            "{card.myth}"
+                                            &ldquo;{card.myth}&rdquo;
                                         </p>
                                         <div className="mt-6 text-white/70 text-sm flex items-center gap-2">
                                             <RotateCcw className="w-4 h-4" />

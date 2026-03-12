@@ -18,11 +18,11 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
         }
 
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const fileExt = file.name.includes('.') ? file.name.split('.').pop() : '';
+        const fileName = `${Date.now()}-${crypto.randomUUID()}${fileExt ? `.${fileExt}` : ''}`;
         const filePath = `${fileName}`;
 
-        const { data, error } = await supabase
+        const { error } = await supabase
             .storage
             .from('article-images')
             .upload(filePath, file, {
@@ -38,8 +38,9 @@ export async function POST(request: Request) {
             .getPublicUrl(filePath);
 
         return NextResponse.json({ url: publicUrl });
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Upload failed';
         console.error('Upload error:', error);
-        return NextResponse.json({ error: error.message || 'Upload failed' }, { status: 500 });
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

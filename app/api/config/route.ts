@@ -1,45 +1,31 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 
+const FALLBACK_DEFAULT_PIXEL_ID = '1213472546398709';
+
 export async function GET() {
     try {
         const supabase = await createClient();
         const { data: config, error } = await supabase
             .from('global_config')
-            .select('*')
-            .single();
+            .select('default_pixel_id,default_cta_url')
+            .eq('id', 1)
+            .maybeSingle();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 is "The result contains 0 rows"
+        if (error) {
             throw error;
         }
 
-        if (!config) {
-            return NextResponse.json({ defaultPixelId: "1213472546398709", defaultCtaUrl: "", articles: {} });
-        }
-
-        // Fetch article specific configs (pixel_id, cta_url)
-        const { data: articles } = await supabase
-            .from('articles')
-            .select('slug, pixel_id, cta_url');
-
-        const articlesConfig: Record<string, any> = {};
-        articles?.forEach(a => {
-            if (a.pixel_id || a.cta_url) {
-                articlesConfig[a.slug] = {
-                    pixelId: a.pixel_id,
-                    ctaUrl: a.cta_url
-                };
-            }
-        });
-
         return NextResponse.json({
-            defaultPixelId: config.default_pixel_id,
-            defaultCtaUrl: config.default_cta_url,
-            articles: articlesConfig
+            defaultPixelId: config?.default_pixel_id ?? FALLBACK_DEFAULT_PIXEL_ID,
+            defaultCtaUrl: config?.default_cta_url ?? '',
         });
     } catch (error) {
         console.error('Error fetching config:', error);
-        return NextResponse.json({ defaultPixelId: "1213472546398709", defaultCtaUrl: "", articles: {} });
+        return NextResponse.json({
+            defaultPixelId: FALLBACK_DEFAULT_PIXEL_ID,
+            defaultCtaUrl: '',
+        });
     }
 }
 
@@ -47,39 +33,29 @@ export async function POST(request: Request) {
     try {
         const supabase = await createClient();
 
-        // Check authentication
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const body = await request.json();
+        const body = (await request.json()) as {
+            defaultPixelId?: string;
+            defaultCtaUrl?: string;
+        };
 
-        // Update global config
-        const { error: configError } = await supabase
+        const { error } = await supabase
             .from('global_config')
             .upsert({
                 id: 1,
-                default_pixel_id: body.defaultPixelId,
-                default_cta_url: body.defaultCtaUrl
+                default_pixel_id: body.defaultPixelId ?? FALLBACK_DEFAULT_PIXEL_ID,
+                default_cta_url: body.defaultCtaUrl ?? '',
             });
 
-        if (configError) throw configError;
-
-        // Update article configs if provided
-        // Note: The frontend sends the entire config object including articles.
-        // We need to iterate and update articles.
-        if (body.articles) {
-            for (const [slug, config] of Object.entries(body.articles)) {
-                const articleConfig = config as any;
-                await supabase
-                    .from('articles')
-                    .update({
-                        pixel_id: articleConfig.pixelId,
-                        cta_url: articleConfig.ctaUrl
-                    })
-                    .eq('slug', slug);
-            }
+        if (error) {
+            throw error;
         }
 
         return NextResponse.json({ success: true });

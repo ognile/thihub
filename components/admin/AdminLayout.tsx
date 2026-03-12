@@ -16,16 +16,14 @@ interface AdminLayoutProps {
 export default function AdminLayout({ children }: AdminLayoutProps) {
     const pathname = usePathname();
     const isLoginPage = pathname === '/admin/login';
-    const [collapsed, setCollapsed] = useState(false);
+    const isArticleEditorRoute = pathname.startsWith('/admin/articles/');
+    const [userCollapsed, setUserCollapsed] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
 
     useEffect(() => {
         const checkMobile = () => {
             setIsMobile(window.innerWidth < 768);
-            if (window.innerWidth < 768) {
-                setCollapsed(true);
-            }
         };
         
         checkMobile();
@@ -33,17 +31,16 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         return () => window.removeEventListener('resize', checkMobile);
     }, []);
 
-    // Auto-collapse sidebar when editing an article
-    useEffect(() => {
-        if (pathname.startsWith('/admin/articles/')) {
-            setCollapsed(true);
-        }
-    }, [pathname]);
+    const collapsed = isMobile || isArticleEditorRoute || userCollapsed;
+    const handleSidebarToggle = () => {
+        if (isMobile || isArticleEditorRoute) return;
+        setUserCollapsed((prev) => !prev);
+    };
 
     // For login page, render without sidebar
     if (isLoginPage) {
         return (
-            <div className="min-h-screen bg-background">
+            <div className="min-h-screen bg-background" data-admin-chrome="true">
                 {children}
                 <Toaster position="bottom-right" richColors />
             </div>
@@ -54,19 +51,19 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         <div className="min-h-screen bg-background">
             {/* Desktop Sidebar */}
             {!isMobile && (
-                <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+                <Sidebar collapsed={collapsed} onToggle={handleSidebarToggle} />
             )}
 
             {/* Mobile Header */}
             {isMobile && (
-                <header className="fixed top-0 left-0 right-0 h-14 bg-background border-b border-border z-50 flex items-center px-4">
+                <header className="fixed top-0 left-0 right-0 h-14 bg-background border-b border-border z-50 flex items-center px-4" data-admin-chrome="true">
                     <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
                         <SheetTrigger asChild>
                             <Button variant="ghost" size="icon" className="mr-3">
                                 <Menu className="h-5 w-5" />
                             </Button>
                         </SheetTrigger>
-                        <SheetContent side="left" className="p-0 w-[240px]">
+                        <SheetContent side="left" className="p-0 w-[240px]" data-admin-chrome="true">
                             <Sidebar collapsed={false} onToggle={() => setMobileOpen(false)} />
                         </SheetContent>
                     </Sheet>
@@ -86,7 +83,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                     isMobile ? 'pt-14' : collapsed ? 'pl-[68px]' : 'pl-[240px]'
                 )}
             >
-                <div className="p-6 max-w-6xl mx-auto">
+                <div
+                    className={cn(
+                        isArticleEditorRoute
+                            ? 'w-full max-w-none p-0'
+                            : 'mx-auto max-w-6xl p-6',
+                    )}
+                >
                     {children}
                 </div>
             </main>

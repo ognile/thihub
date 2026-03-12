@@ -3,11 +3,13 @@ import Link from 'next/link';
 
 interface ArticleHeaderProps {
     transparent?: boolean;
+    embedded?: boolean;
+    interactive?: boolean;
 }
 
-export default function ArticleHeader({ transparent = false }: ArticleHeaderProps) {
+export default function ArticleHeader({ transparent = false, embedded = false, interactive = true }: ArticleHeaderProps) {
     return (
-        <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${transparent ? 'bg-transparent border-transparent' : 'bg-white border-b border-gray-200 shadow-sm'}`}>
+        <header className={`${embedded ? 'absolute' : 'fixed'} top-0 left-0 right-0 z-50 transition-all duration-300 ${interactive ? '' : 'pointer-events-none'} ${transparent ? 'bg-transparent border-transparent' : 'bg-white border-b border-gray-200 shadow-sm'}`}>
             <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                 <Link href="/" className="flex items-center gap-2 group">
                     <div className={`w-8 h-8 flex items-center justify-center font-serif font-bold text-xl rounded-sm transition-colors ${transparent ? 'bg-white text-gray-900' : 'bg-[#0F4C81] text-white'}`}>

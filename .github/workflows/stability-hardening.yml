@@ -1,0 +1,38 @@
+name: Stability Hardening CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run repository verification
+        run: PORT=3100 npm run verify:repo
+
+      - name: Upload verification artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stability-hardening-artifacts
+          if-no-files-found: ignore
+          path: |
+            ops/reports/**
+            ops/visual-snapshots/**
+            ops/usage-snapshots/*.json

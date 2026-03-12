@@ -114,7 +114,7 @@ export default function EditorialFooter() {
                     <div className="text-center text-sm text-gray-500">
                         <p>© 2024 Top Health Insider. All rights reserved.</p>
                         <p className="mt-2 text-xs">
-                            A trusted resource for evidence-based women's health information.
+                            A trusted resource for evidence-based women&apos;s health information.
                         </p>
                     </div>
                 </div>

@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
     Table,
@@ -27,7 +26,6 @@ import {
 import {
     Plus,
     Settings,
-    ExternalLink,
     Pencil,
     Trash2,
     MessageSquare,
@@ -39,6 +37,8 @@ import {
 import { CommentData } from '@/components/FBComments';
 import GlobalSettingsSheet from '@/components/admin/GlobalSettingsSheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import AdminPageHeader from '@/components/admin/ui/AdminPageHeader';
+import AdminDataTableShell from '@/components/admin/ui/AdminDataTableShell';
 
 interface Article {
     id: string;
@@ -84,7 +84,7 @@ export default function AdminDashboard() {
         if (!articleToDelete) return;
 
         try {
-            const res = await fetch(`/api/articles?slug=${articleToDelete}`, {
+            const res = await fetch(`/api/articles/${articleToDelete}`, {
                 method: 'DELETE',
             });
 
@@ -114,7 +114,7 @@ export default function AdminDashboard() {
 
     if (isLoading) {
         return (
-            <div className="space-y-6">
+            <div className="space-y-6" data-admin-chrome="true">
                 <div className="flex items-center justify-between">
                     <Skeleton className="h-8 w-48" />
                     <Skeleton className="h-10 w-32" />
@@ -130,14 +130,12 @@ export default function AdminDashboard() {
     }
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="min-w-0">
-                    <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-                    <p className="text-muted-foreground">Manage your articles and settings</p>
-                </div>
-                <div className="flex gap-2 flex-shrink-0">
+        <div className="space-y-6" data-admin-chrome="true">
+            <AdminPageHeader
+                title="Dashboard"
+                description="Manage your articles and settings"
+                actions={
+                    <>
                     <Button variant="outline" onClick={() => setIsConfigSheetOpen(true)}>
                         <Settings className="mr-2 h-4 w-4" />
                         Settings
@@ -148,8 +146,9 @@ export default function AdminDashboard() {
                             New Article
                         </Link>
                     </Button>
-                </div>
-            </div>
+                    </>
+                }
+            />
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -193,18 +192,23 @@ export default function AdminDashboard() {
                                 className="pl-9 pr-9"
                             />
                             {searchQuery && (
-                                <button
+                                <Button
+                                    type="button"
                                     onClick={() => setSearchQuery('')}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    aria-label="Clear search"
                                 >
                                     <X className="h-4 w-4" />
-                                </button>
+                                </Button>
                             )}
                         </div>
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">
                     <div className="rounded-md border-t">
+                        <AdminDataTableShell minWidthClassName="min-w-[760px]">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -247,19 +251,19 @@ export default function AdminDashboard() {
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex items-center justify-end gap-2">
-                                                    <Button variant="ghost" size="icon" asChild title="View Live">
+                                                    <Button variant="ghost" size="icon" asChild title="View Live" aria-label="View live article">
                                                         <Link href={`/articles/${article.slug}`} target="_blank">
                                                             <Eye className="h-4 w-4" />
                                                         </Link>
                                                     </Button>
-                                                    <Button variant="ghost" size="icon" asChild title="Edit">
+                                                    <Button variant="ghost" size="icon" asChild title="Edit" aria-label="Edit article">
                                                         <Link href={`/admin/articles/${article.slug}`}>
                                                             <Pencil className="h-4 w-4" />
                                                         </Link>
                                                     </Button>
                                                     <DropdownMenu>
                                                         <DropdownMenuTrigger asChild>
-                                                            <Button variant="ghost" size="icon">
+                                                            <Button variant="ghost" size="icon" aria-label="Open actions">
                                                                 <MoreHorizontal className="h-4 w-4" />
                                                             </Button>
                                                         </DropdownMenuTrigger>
@@ -280,6 +284,7 @@ export default function AdminDashboard() {
                                 )}
                             </TableBody>
                         </Table>
+                        </AdminDataTableShell>
                     </div>
                 </CardContent>
             </Card>

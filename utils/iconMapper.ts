@@ -250,5 +250,6 @@ export function getIconCategories(): Record<string, string[]> {
     };
 }
 
-export default { iconKeywordMap, getIconName, getIconCategories };
+const iconMapper = { iconKeywordMap, getIconName, getIconCategories };
 
+export default iconMapper;

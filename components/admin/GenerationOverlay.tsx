@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 interface GenerationOverlayProps {
     stage: number; // 0-3 for different stages
@@ -12,6 +12,25 @@ const STAGES = [
     { label: 'Generating comments', icon: '💬' },
     { label: 'Finalizing article', icon: '✨' },
 ];
+
+type Particle = {
+    id: number;
+    left: string;
+    top: string;
+    color: string;
+    delay: string;
+    duration: string;
+    opacity: number;
+    blur: number;
+};
+
+function createSeededRandom(seed: number) {
+    let value = seed;
+    return () => {
+        value = (value * 1664525 + 1013904223) % 4294967296;
+        return value / 4294967296;
+    };
+}
 
 export default function GenerationOverlay({ stage }: GenerationOverlayProps) {
     const [dots, setDots] = useState('');
@@ -33,6 +52,20 @@ export default function GenerationOverlay({ stage }: GenerationOverlayProps) {
         return () => clearInterval(interval);
     }, []);
 
+    const particles = useMemo<Particle[]>(() => {
+        const random = createSeededRandom((particleKey + 1) * 7919);
+        return [...Array(30)].map((_, i) => ({
+            id: i,
+            left: `${random() * 100}%`,
+            top: `${100 + random() * 20}%`,
+            color: ['#60A5FA', '#A78BFA', '#34D399', '#F472B6', '#FBBF24'][i % 5],
+            delay: `${random() * 5}s`,
+            duration: `${6 + random() * 4}s`,
+            opacity: 0.6 + random() * 0.4,
+            blur: 6 + random() * 6,
+        }));
+    }, [particleKey]);
+
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden">
             {/* Animated gradient background */}
@@ -47,18 +80,18 @@ export default function GenerationOverlay({ stage }: GenerationOverlayProps) {
 
             {/* Floating particles */}
             <div key={particleKey} className="absolute inset-0 overflow-hidden pointer-events-none">
-                {[...Array(30)].map((_, i) => (
+                {particles.map((particle) => (
                     <div
-                        key={i}
+                        key={particle.id}
                         className="absolute w-1 h-1 rounded-full animate-float-up"
                         style={{
-                            left: `${Math.random() * 100}%`,
-                            top: `${100 + Math.random() * 20}%`,
-                            backgroundColor: ['#60A5FA', '#A78BFA', '#34D399', '#F472B6', '#FBBF24'][i % 5],
-                            animationDelay: `${Math.random() * 5}s`,
-                            animationDuration: `${6 + Math.random() * 4}s`,
-                            opacity: 0.6 + Math.random() * 0.4,
-                            boxShadow: `0 0 ${6 + Math.random() * 6}px currentColor`,
+                            left: particle.left,
+                            top: particle.top,
+                            backgroundColor: particle.color,
+                            animationDelay: particle.delay,
+                            animationDuration: particle.duration,
+                            opacity: particle.opacity,
+                            boxShadow: `0 0 ${particle.blur}px currentColor`,
                         }}
                     />
                 ))}

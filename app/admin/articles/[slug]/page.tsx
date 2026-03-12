@@ -5,21 +5,30 @@ import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import LiveArticleEditor from '@/components/admin/LiveArticleEditor';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { ArticleBlock, HeroMetaV1, StylePreset } from '@/lib/articles/schema';
 
 interface Article {
     slug: string;
     title: string;
     subtitle: string;
     content: string;
+    contentBlocks: ArticleBlock[];
+    contentSchemaVersion: number;
+    stylePreset: StylePreset;
     author: string;
     reviewer: string;
     date: string;
     image: string;
-    ctaText?: string;
-    ctaTitle?: string;
-    ctaDescription?: string;
-    keyTakeaways?: { title: string; content: string }[] | null;
-    comments?: any[];
+    authorImage?: string | null;
+    heroMeta: HeroMetaV1;
+    ctaUrl?: string;
+    pixelId?: string;
+    comments?: unknown[];
+    stickyCTAEnabled?: boolean;
+    stickyCTAText?: string;
+    stickyCTAPrice?: string;
+    stickyCTAOriginalPrice?: string;
+    stickyCTAProductName?: string;
 }
 
 export default function EditArticlePage() {
@@ -35,30 +44,30 @@ export default function EditArticlePage() {
 
         const fetchArticle = async () => {
             try {
-                // Use the optimized single-article endpoint
-                const res = await fetch(`/api/articles/${slug}`, { cache: 'no-store' });
-                
-                if (res.status === 404) {
+                const response = await fetch(`/api/articles/${slug}`, { cache: 'no-store' });
+
+                if (response.status === 404) {
                     if (retries < maxRetries) {
-                        retries++;
+                        retries += 1;
                         setTimeout(fetchArticle, 1000 * retries);
                         return;
                     }
+
                     toast.error('Article not found');
                     router.push('/admin');
                     setLoading(false);
                     return;
                 }
 
-                if (res.ok) {
-                    const data = await res.json();
-                    setArticle(data);
+                if (response.ok) {
+                    const payload = (await response.json()) as Article;
+                    setArticle(payload);
                     setLoading(false);
                 }
-            } catch (err) {
-                console.error(err);
+            } catch (error) {
+                console.error(error);
                 if (retries < maxRetries) {
-                    retries++;
+                    retries += 1;
                     setTimeout(fetchArticle, 1000 * retries);
                 } else {
                     toast.error('Failed to load article');
@@ -71,20 +80,22 @@ export default function EditArticlePage() {
     }, [slug, router]);
 
     const handleSave = async (updatedArticle: Article) => {
-        const res = await fetch('/api/articles', {
-            method: 'POST',
+        const response = await fetch(`/api/articles/${slug}`, {
+            method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updatedArticle),
         });
-        if (!res.ok) {
-            throw new Error('Failed to save');
+
+        if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw new Error(payload.error || 'Failed to save article');
         }
     };
 
     if (loading) {
         return (
             <div className="min-h-screen bg-muted/30 p-6">
-                <div className="max-w-4xl mx-auto space-y-4">
+                <div className="mx-auto max-w-4xl space-y-4">
                     <Skeleton className="h-12 w-64" />
                     <Skeleton className="h-[60vh] w-full rounded-xl" />
                     <Skeleton className="h-32 w-full" />
@@ -95,7 +106,7 @@ export default function EditArticlePage() {
 
     if (!article) {
         return (
-            <div className="flex items-center justify-center min-h-screen text-muted-foreground">
+            <div className="flex min-h-screen items-center justify-center text-muted-foreground">
                 Article not found
             </div>
         );

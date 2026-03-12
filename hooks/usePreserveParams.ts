@@ -57,7 +57,7 @@ export default function usePreserveParams(articleSlug?: string) {
                     }
 
                     anchor.href = url.toString();
-                } catch (e) {
+                } catch {
                     // Ignore parsing errors
                 }
             });

@@ -1,4 +1,5 @@
 import React from 'react';
+import Image from 'next/image';
 import { BadgeCheck, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DEFAULT_AUTHOR_IMAGE, type HeroMetaV1 } from '@/lib/articles/schema';
@@ -74,7 +75,15 @@ export default function ArticleHero({
             )}
         >
             <div className="absolute inset-0 z-0">
-                <img src={image} alt="Hero Background" className="h-full w-full object-cover object-center" />
+                <Image
+                    unoptimized
+                    src={image}
+                    alt="Hero Background"
+                    fill
+                    priority={mode === 'public'}
+                    sizes="100vw"
+                    className="object-cover object-center"
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-black/30" />
             </div>
 
@@ -199,9 +208,12 @@ export default function ArticleHero({
 
                 <div className="flex items-center gap-4 border-t border-white/20 pt-6">
                     <div className="h-12 w-12 flex-shrink-0 rounded-full bg-black/20 p-0.5 backdrop-blur-sm ring-2 ring-white/30">
-                        <img
+                        <Image
+                            unoptimized
                             src={authorImage || DEFAULT_AUTHOR_IMAGE}
                             alt={author || 'Author'}
+                            width={48}
+                            height={48}
                             className="h-full w-full rounded-full object-cover"
                         />
                     </div>

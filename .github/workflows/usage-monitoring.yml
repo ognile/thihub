@@ -1,0 +1,42 @@
+name: Usage Monitoring
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 9 * * *"
+
+jobs:
+  usage-snapshot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Collect Vercel usage snapshot
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        run: npm run ops:usage:snapshot
+
+      - name: Evaluate allocation burn rate
+        env:
+          INCLUDED_ALLOCATION_USD: ${{ vars.INCLUDED_ALLOCATION_USD }}
+          USAGE_ALERT_THRESHOLD_PCT: ${{ vars.USAGE_ALERT_THRESHOLD_PCT }}
+        run: npm run ops:usage:check
+
+      - name: Upload snapshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: usage-snapshots
+          path: ops/usage-snapshots/*.json
+          if-no-files-found: error

@@ -3,6 +3,31 @@
 import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 
+interface FloatingShape {
+    size: number;
+    left: string;
+    top: string;
+    duration: number;
+    delay?: number;
+    rotation?: number;
+}
+
+const balancedCells: FloatingShape[] = Array.from({ length: 15 }, (_, index) => ({
+    size: 50 + (index % 5) * 18,
+    left: `${(index * 17) % 100}%`,
+    top: `${(index * 29) % 100}%`,
+    duration: 3 + (index % 4) * 0.5,
+    delay: (index % 3) * 0.4,
+}));
+
+const stressedCells: FloatingShape[] = Array.from({ length: 20 }, (_, index) => ({
+    size: 20 + (index % 6) * 10,
+    left: `${(index * 13) % 100}%`,
+    top: `${(index * 19) % 100}%`,
+    duration: 2 + (index % 5) * 0.2,
+    rotation: (index * 37) % 360,
+}));
+
 export default function LifestyleSlider() {
     const [sliderPosition, setSliderPosition] = useState(50);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -45,7 +70,7 @@ export default function LifestyleSlider() {
                     className="text-center mb-12"
                 >
                     <h2 className="text-4xl md:text-5xl font-serif font-bold text-gray-900 mb-4">
-                        Lifestyle's Cellular Impact
+                        Lifestyle&apos;s Cellular Impact
                     </h2>
                     <p className="text-lg text-gray-600 max-w-2xl mx-auto">
                         Drag the slider to compare how stress vs. balance affects your body at the cellular level.
@@ -77,24 +102,24 @@ export default function LifestyleSlider() {
                         </div>
                         {/* Abstract cellular pattern */}
                         <div className="absolute inset-0 opacity-20">
-                            {[...Array(15)].map((_, i) => (
+                            {balancedCells.map((cell, index) => (
                                 <motion.div
-                                    key={i}
+                                    key={index}
                                     className="absolute rounded-full bg-white"
                                     style={{
-                                        width: Math.random() * 100 + 50,
-                                        height: Math.random() * 100 + 50,
-                                        left: `${Math.random() * 100}%`,
-                                        top: `${Math.random() * 100}%`,
+                                        width: cell.size,
+                                        height: cell.size,
+                                        left: cell.left,
+                                        top: cell.top,
                                     }}
                                     animate={{
                                         scale: [1, 1.2, 1],
                                         opacity: [0.3, 0.6, 0.3],
                                     }}
                                     transition={{
-                                        duration: 3 + Math.random() * 2,
+                                        duration: cell.duration,
                                         repeat: Infinity,
-                                        delay: Math.random() * 2,
+                                        delay: cell.delay,
                                     }}
                                 />
                             ))}
@@ -120,23 +145,23 @@ export default function LifestyleSlider() {
                         </div>
                         {/* Chaotic pattern */}
                         <div className="absolute inset-0 opacity-20">
-                            {[...Array(20)].map((_, i) => (
+                            {stressedCells.map((cell, index) => (
                                 <motion.div
-                                    key={i}
+                                    key={index}
                                     className="absolute bg-white"
                                     style={{
-                                        width: Math.random() * 60 + 20,
-                                        height: Math.random() * 60 + 20,
-                                        left: `${Math.random() * 100}%`,
-                                        top: `${Math.random() * 100}%`,
-                                        transform: `rotate(${Math.random() * 360}deg)`,
+                                        width: cell.size,
+                                        height: cell.size,
+                                        left: cell.left,
+                                        top: cell.top,
+                                        transform: `rotate(${cell.rotation ?? 0}deg)`,
                                     }}
                                     animate={{
                                         rotate: [0, 360],
                                         scale: [1, 1.3, 0.8, 1],
                                     }}
                                     transition={{
-                                        duration: 2 + Math.random(),
+                                        duration: cell.duration,
                                         repeat: Infinity,
                                         ease: 'linear',
                                     }}

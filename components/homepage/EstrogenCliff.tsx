@@ -1,27 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from 'recharts';
 
-// Generate estrogen level data
-const generateData = () => {
-    const data = [];
-    for (let age = 30; age <= 60; age++) {
-        let level = 100;
+const estrogenData = Array.from({ length: 31 }, (_, index) => {
+    const age = 30 + index;
+    let level = 100;
 
-        if (age >= 40 && age < 45) {
-            level = 100 - (age - 40) * 5; // Slow decline
-        } else if (age >= 45 && age < 52) {
-            level = 75 - (age - 45) * 10; // Sharp drop
-        } else if (age >= 52) {
-            level = 5 + Math.random() * 5; // Low plateau
-        }
-
-        data.push({ age, level: Math.max(5, level) });
+    if (age >= 40 && age < 45) {
+        level = 100 - (age - 40) * 5;
+    } else if (age >= 45 && age < 52) {
+        level = 75 - (age - 45) * 10;
+    } else if (age >= 52) {
+        level = 5 + ((age - 52) % 3) * 1.5;
     }
-    return data;
-};
+
+    return { age, level: Math.max(5, level) };
+});
 
 const ageSymptoms: Record<number, string[]> = {
     35: ['Cycle irregularities beginning', 'Mild mood shifts'],
@@ -33,7 +29,15 @@ const ageSymptoms: Record<number, string[]> = {
 
 export default function EstrogenCliff() {
     const [currentAge, setCurrentAge] = useState(45);
-    const data = generateData();
+    const [chartReady, setChartReady] = useState(false);
+
+    useEffect(() => {
+        const frame = requestAnimationFrame(() => {
+            setChartReady(true);
+        });
+
+        return () => cancelAnimationFrame(frame);
+    }, []);
 
     const symptoms = ageSymptoms[currentAge as keyof typeof ageSymptoms] ||
         ageSymptoms[Math.round(currentAge / 5) * 5 as keyof typeof ageSymptoms] ||
@@ -53,7 +57,7 @@ export default function EstrogenCliff() {
                         The Estrogen Cliff
                     </h2>
                     <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-                        Drag the slider to see how estrogen levels change with age—and what symptoms emerge at each stage.
+                        Drag the slider to see how estrogen levels change with age and what symptoms emerge at each stage.
                     </p>
                 </motion.div>
 
@@ -64,49 +68,50 @@ export default function EstrogenCliff() {
                     transition={{ duration: 0.6 }}
                     className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-2xl p-8 shadow-lg"
                 >
-                    {/* Graph */}
                     <div className="h-80 mb-8">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={data}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                                <XAxis
-                                    dataKey="age"
-                                    label={{ value: 'Age', position: 'insideBottom', offset: -5 }}
-                                    stroke="#6b7280"
-                                />
-                                <YAxis
-                                    label={{ value: 'Estrogen Level (relative)', angle: -90, position: 'insideLeft' }}
-                                    stroke="#6b7280"
-                                />
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: 'white',
-                                        border: '1px solid #e5e7eb',
-                                        borderRadius: '8px'
-                                    }}
-                                />
-                                <Line
-                                    type="monotone"
-                                    dataKey="level"
-                                    stroke="#dc2626"
-                                    strokeWidth={3}
-                                    dot={false}
-                                    activeDot={{ r: 6, fill: '#dc2626' }}
-                                />
-                                {/* Current age indicator */}
-                                <Line
-                                    type="monotone"
-                                    dataKey={() => null}
-                                    stroke="#9333ea"
-                                    strokeWidth={2}
-                                    strokeDasharray="5 5"
-                                    dot={false}
-                                />
-                            </LineChart>
-                        </ResponsiveContainer>
+                        {chartReady ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={estrogenData}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                    <XAxis
+                                        dataKey="age"
+                                        label={{ value: 'Age', position: 'insideBottom', offset: -5 }}
+                                        stroke="#6b7280"
+                                    />
+                                    <YAxis
+                                        label={{ value: 'Estrogen Level (relative)', angle: -90, position: 'insideLeft' }}
+                                        stroke="#6b7280"
+                                    />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: 'white',
+                                            border: '1px solid #e5e7eb',
+                                            borderRadius: '8px'
+                                        }}
+                                    />
+                                    <Line
+                                        type="monotone"
+                                        dataKey="level"
+                                        stroke="#dc2626"
+                                        strokeWidth={3}
+                                        dot={false}
+                                        activeDot={{ r: 6, fill: '#dc2626' }}
+                                    />
+                                    <Line
+                                        type="monotone"
+                                        dataKey={() => null}
+                                        stroke="#9333ea"
+                                        strokeWidth={2}
+                                        strokeDasharray="5 5"
+                                        dot={false}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full w-full rounded-xl bg-white/60" />
+                        )}
                     </div>
 
-                    {/* Slider */}
                     <div className="mb-8">
                         <label className="block text-sm font-bold text-gray-700 mb-3 text-center">
                             Current Age: <span className="text-2xl text-red-600 font-serif">{currentAge}</span>
@@ -124,7 +129,6 @@ export default function EstrogenCliff() {
                         />
                     </div>
 
-                    {/* Symptom Cards */}
                     <div className="space-y-3">
                         <h3 className="text-lg font-bold text-gray-900 font-serif text-center mb-4">
                             Common Symptoms at Age {currentAge}:

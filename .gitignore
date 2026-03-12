@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# operations outputs
+/ops/reports/
+/ops/visual-snapshots/
+/ops/usage-snapshots/*.json
+.env*.local

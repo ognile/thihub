@@ -42,6 +42,9 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --admin-outline: oklch(0.24 0 0);
+  --admin-outline-soft: oklch(0.24 0 0 / 0.28);
+  --admin-text-strong: oklch(0.17 0 0);
 }
 
 body {
@@ -350,6 +353,89 @@ input[type="range"]::-moz-range-thumb {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+@layer components {
+  .admin-panel {
+    border: 1px solid var(--admin-outline-soft);
+    border-radius: var(--radius-md);
+    background: var(--color-background);
+  }
+
+  .admin-section {
+    border: 1px solid var(--admin-outline-soft);
+    border-radius: var(--radius-md);
+    background: var(--color-background);
+    padding: 1rem;
+  }
+
+  .admin-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 0.75rem;
+  }
+
+  .admin-field-label {
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 600;
+    color: var(--color-muted-foreground);
+  }
+
+  .admin-value {
+    min-width: 0;
+    display: block;
+    color: var(--admin-text-strong);
+  }
+
+  .admin-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+
+  .admin-status-default {
+    @apply bg-muted text-muted-foreground border-border;
+  }
+
+  .admin-status-draft {
+    @apply bg-amber-500/10 text-amber-700 border-amber-300;
+  }
+
+  .admin-status-published {
+    @apply bg-emerald-500/10 text-emerald-700 border-emerald-300;
+  }
+
+  .admin-status-archived {
+    @apply bg-slate-500/10 text-slate-700 border-slate-300;
+  }
+
+  .admin-status-completed {
+    @apply bg-primary/10 text-primary border-primary/30;
+  }
+
+  .admin-status-in-progress {
+    @apply bg-sky-500/10 text-sky-700 border-sky-300;
+  }
+
+  .admin-status-error {
+    @apply bg-destructive/10 text-destructive border-destructive/30;
+  }
+}
+
+[data-admin-chrome="true"] svg {
+  stroke-width: 1.25;
+}
+
+[data-admin-chrome="true"] .shadow-xs,
+[data-admin-chrome="true"] .shadow-sm,
+[data-admin-chrome="true"] .shadow,
+[data-admin-chrome="true"] .shadow-md,
+[data-admin-chrome="true"] .shadow-lg,
+[data-admin-chrome="true"] .shadow-xl {
+  box-shadow: none !important;
 }
 
 /* Safe area for mobile sticky CTA */

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 
 export interface CommentData {
@@ -14,7 +15,7 @@ export interface CommentData {
     isLiked?: boolean;
 }
 
-interface CommentProps extends CommentData { }
+type CommentProps = CommentData;
 
 const Comment = ({ author, avatar, content, time, likes: initialLikes, hasReplies, isLiked: initialIsLiked }: CommentProps) => {
     const [likes, setLikes] = useState(initialLikes);
@@ -34,7 +35,14 @@ const Comment = ({ author, avatar, content, time, likes: initialLikes, hasReplie
     return (
         <div className="flex gap-2 mb-3 font-sans">
             <div className="flex-shrink-0 cursor-pointer">
-                <img src={avatar} alt={author} className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover border border-gray-200" />
+                <Image
+                    unoptimized
+                    src={avatar}
+                    alt={author}
+                    width={40}
+                    height={40}
+                    className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover border border-gray-200"
+                />
             </div>
             <div className="flex-1">
                 <div className="bg-[#F0F2F5] rounded-2xl px-3 py-2 inline-block relative group">

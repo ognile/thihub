@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
-import { ImagePlus, Search, Upload, X, Loader2 } from 'lucide-react';
+import { ImagePlus, Search, Upload, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ImagePlaceholderProps {
@@ -68,9 +69,12 @@ export default function ImagePlaceholder({
     if (currentImageUrl) {
         return (
             <div className={cn('my-8 relative group', className)}>
-                <img
+                <Image
+                    unoptimized
                     src={currentImageUrl}
                     alt={searchQuery}
+                    width={1600}
+                    height={900}
                     className="w-full rounded-xl shadow-md"
                 />
                 
@@ -121,7 +125,7 @@ export default function ImagePlaceholder({
 
                     {/* Query Text */}
                     <p className="text-lg font-semibold text-slate-700 mb-6 max-w-md">
-                        "{searchQuery}"
+                        &ldquo;{searchQuery}&rdquo;
                     </p>
 
                     {/* Upload Button */}
@@ -154,4 +158,3 @@ export default function ImagePlaceholder({
         </div>
     );
 }
-

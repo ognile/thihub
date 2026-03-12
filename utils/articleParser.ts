@@ -82,13 +82,15 @@ export type V2Component =
     | V2ImagePlaceholder 
     | V2Blockquote;
 
+type TiptapAttrs = Record<string, unknown>;
+
 // Tiptap Node Types
 export interface TiptapNode {
     type: string;
-    attrs?: Record<string, any>;
+    attrs?: TiptapAttrs;
     content?: TiptapNode[];
     text?: string;
-    marks?: { type: string; attrs?: Record<string, any> }[];
+    marks?: { type: string; attrs?: TiptapAttrs }[];
 }
 
 export interface TiptapDocument {
@@ -197,10 +199,11 @@ function convertComponentToTiptapNode(component: V2Component): TiptapNode | null
                 ],
             };
 
-        default:
-            console.warn('Unknown component type:', (component as any).type);
-            return null;
     }
+
+    const unsupportedComponent: never = component;
+    console.warn('Unknown component type:', unsupportedComponent);
+    return null;
 }
 
 /**
@@ -337,27 +340,27 @@ function convertTiptapNodeToHTML(node: TiptapNode): string {
             return `<p>${pContent}</p>`;
 
         case 'heading':
-            const level = node.attrs?.level || 2;
+            const level = getNumberAttr(node.attrs, 'level', 2);
             const hContent = node.content?.map(n => n.text || '').join('') || '';
             return `<h${level}>${hContent}</h${level}>`;
 
         case 'iconList':
-            const itemsJson = JSON.stringify(node.attrs?.items || []);
-            return `<div data-type="icon-list" data-items='${itemsJson}' data-columns="${node.attrs?.columns || 2}"></div>`;
+            const itemsJson = JSON.stringify(getArrayAttr(node.attrs, 'items'));
+            return `<div data-type="icon-list" data-items='${itemsJson}' data-columns="${getNumberAttr(node.attrs, 'columns', 2)}"></div>`;
 
         case 'comparisonTable':
-            const featuresJson = JSON.stringify(node.attrs?.features || []);
-            return `<div data-type="comparison-table" data-features='${featuresJson}' data-our-brand="${node.attrs?.ourBrand || 'Our Formula'}" data-their-brand="${node.attrs?.theirBrand || 'Generic Brands'}"></div>`;
+            const featuresJson = JSON.stringify(getArrayAttr(node.attrs, 'features'));
+            return `<div data-type="comparison-table" data-features='${featuresJson}' data-our-brand="${getStringAttr(node.attrs, 'ourBrand', 'Our Formula')}" data-their-brand="${getStringAttr(node.attrs, 'theirBrand', 'Generic Brands')}"></div>`;
 
         case 'timeline':
-            const weeksJson = JSON.stringify(node.attrs?.weeks || []);
-            return `<div data-type="timeline" data-weeks='${weeksJson}' data-title="${node.attrs?.title || 'Your Journey'}"></div>`;
+            const weeksJson = JSON.stringify(getArrayAttr(node.attrs, 'weeks'));
+            return `<div data-type="timeline" data-weeks='${weeksJson}' data-title="${getStringAttr(node.attrs, 'title', 'Your Journey')}"></div>`;
 
         case 'testimonial':
-            return `<div data-type="testimonial" data-helped-with="${node.attrs?.helpedWith || ''}" data-title="${node.attrs?.title || ''}" data-body="${escapeHtml(node.attrs?.body || '')}" data-author="${node.attrs?.author || ''}"></div>`;
+            return `<div data-type="testimonial" data-helped-with="${getStringAttr(node.attrs, 'helpedWith')}" data-title="${getStringAttr(node.attrs, 'title')}" data-body="${escapeHtml(getStringAttr(node.attrs, 'body'))}" data-author="${getStringAttr(node.attrs, 'author')}"></div>`;
 
         case 'imagePlaceholder':
-            return `<div data-type="image-placeholder" data-search-query="${node.attrs?.searchQuery || ''}"></div>`;
+            return `<div data-type="image-placeholder" data-search-query="${getStringAttr(node.attrs, 'searchQuery')}"></div>`;
 
         case 'blockquote':
             const bqContent = node.content?.map(n => convertTiptapNodeToHTML(n)).join('') || '';
@@ -371,6 +374,21 @@ function convertTiptapNodeToHTML(node: TiptapNode): string {
     }
 }
 
+function getStringAttr(attrs: TiptapAttrs | undefined, key: string, fallback = ''): string {
+    const value = attrs?.[key];
+    return typeof value === 'string' ? value : fallback;
+}
+
+function getNumberAttr(attrs: TiptapAttrs | undefined, key: string, fallback: number): number {
+    const value = attrs?.[key];
+    return typeof value === 'number' ? value : fallback;
+}
+
+function getArrayAttr(attrs: TiptapAttrs | undefined, key: string): unknown[] {
+    const value = attrs?.[key];
+    return Array.isArray(value) ? value : [];
+}
+
 function escapeHtml(text: string): string {
     if (!text) return '';
     return text
@@ -381,9 +399,10 @@ function escapeHtml(text: string): string {
         .replace(/'/g, '&#039;');
 }
 
-export default {
+const articleParser = {
     convertV2JsonToTiptap,
     parseHTMLToV2Components,
     convertTiptapToHTML,
 };
 
+export default articleParser;

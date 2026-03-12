@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
     LayoutDashboard,
@@ -10,6 +11,7 @@ import {
     ChevronLeft,
     Menu,
     ListChecks,
+    Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -45,6 +47,8 @@ const navItems = [
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
     const pathname = usePathname();
+    const router = useRouter();
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
 
     const isActive = (href: string) => {
         if (href === '/admin') {
@@ -53,9 +57,22 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         return pathname.startsWith(href);
     };
 
+    const handleLogout = async () => {
+        if (isLoggingOut) return;
+        setIsLoggingOut(true);
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+        } finally {
+            router.replace('/admin/login');
+            router.refresh();
+            setIsLoggingOut(false);
+        }
+    };
+
     return (
         <TooltipProvider delayDuration={0}>
             <aside
+                data-admin-chrome="true"
                 className={cn(
                     'fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-in-out flex flex-col',
                     collapsed ? 'w-[68px]' : 'w-[240px]'
@@ -149,12 +166,17 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                             </Tooltip>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <Link
-                                        href="/admin/login"
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={handleLogout}
+                                        disabled={isLoggingOut}
+                                        aria-label="Log out"
                                         className="flex items-center justify-center h-10 w-10 mx-auto rounded-lg text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
                                     >
-                                        <LogOut className="h-5 w-5" />
-                                    </Link>
+                                        {isLoggingOut ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogOut className="h-5 w-5" />}
+                                    </Button>
                                 </TooltipTrigger>
                                 <TooltipContent side="right">Logout</TooltipContent>
                             </Tooltip>
@@ -169,13 +191,17 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                                 <ChevronLeft className="h-5 w-5" />
                                 <span className="text-sm font-medium">Collapse</span>
                             </Button>
-                            <Link
-                                href="/admin/login"
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={handleLogout}
+                                disabled={isLoggingOut}
+                                aria-label="Log out"
                                 className="flex items-center gap-3 px-3 h-10 rounded-lg text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors text-sm font-medium"
                             >
-                                <LogOut className="h-5 w-5" />
-                                <span>Logout</span>
-                            </Link>
+                                {isLoggingOut ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogOut className="h-5 w-5" />}
+                                <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
+                            </Button>
                         </>
                     )}
                 </div>

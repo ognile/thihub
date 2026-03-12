@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef } from "react";
 import type { ArticleBlock } from "@/lib/articles/schema";
 import { getIconComponent } from "@/components/article-v2/IconList";
@@ -859,7 +860,14 @@ export default function BlockCanvas({
               >
                 <div className="relative overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-slate-100 p-6">
                   {block.imageUrl ? (
-                    <img src={block.imageUrl} alt={block.alt ?? block.searchQuery} className="w-full rounded-lg shadow-md" />
+                    <Image
+                      unoptimized
+                      src={block.imageUrl}
+                      alt={block.alt ?? block.searchQuery}
+                      width={1600}
+                      height={900}
+                      className="w-full rounded-lg shadow-md"
+                    />
                   ) : (
                     <p className="text-center text-sm text-slate-500">Suggested image: {block.searchQuery}</p>
                   )}

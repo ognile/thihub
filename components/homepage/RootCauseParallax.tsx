@@ -25,7 +25,7 @@ export default function RootCauseParallax() {
                         The Root Cause Connection
                     </h2>
                     <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-                        Scroll to see how the gut-vagina-brain axis communicates. It's not just one organ—it's a network.
+                        Scroll to see how the gut-vagina-brain axis communicates. It&apos;s not just one organ, it&apos;s a network.
                     </p>
                 </div>
 
@@ -64,7 +64,7 @@ export default function RootCauseParallax() {
                             <div className="flex-1 text-center md:text-left">
                                 <h3 className="text-2xl font-bold text-gray-900 mb-3 font-serif">Brain</h3>
                                 <p className="text-gray-700 leading-relaxed">
-                                    Regulates mood, cognition, and stress response. The hypothalamus controls hormone release and communicates via the vagus nerve—your body's information highway.
+                                    Regulates mood, cognition, and stress response. The hypothalamus controls hormone release and communicates via the vagus nerve, your body&apos;s information highway.
                                 </p>
                             </div>
                         </div>
@@ -116,7 +116,7 @@ export default function RootCauseParallax() {
                     className="mt-16 text-center max-w-3xl mx-auto bg-gradient-to-r from-purple-100 via-green-100 to-pink-100 rounded-xl shadow-lg p-8"
                 >
                     <p className="text-lg text-gray-800 leading-relaxed font-medium">
-                        This interconnected axis explains why menopause isn't just about reproduction—it's systemic.
+                        This interconnected axis explains why menopause isn&apos;t just about reproduction, it&apos;s systemic.
                         When estrogen drops, the <strong>entire network responds</strong>. Understanding this is the first step to healing.
                     </p>
                 </motion.div>

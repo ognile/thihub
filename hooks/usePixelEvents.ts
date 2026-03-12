@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 
+type PixelEventPayload = Record<string, string | number | boolean | null | undefined>;
+
 export default function usePixelEvents() {
     const hasFiredViewContent = useRef(false);
     const hasFiredHalf = useRef(false);
@@ -9,7 +11,7 @@ export default function usePixelEvents() {
 
     useEffect(() => {
         // Helper to track events safely
-        const trackEvent = (eventName: string, data?: any) => {
+        const trackEvent = (eventName: string, data?: PixelEventPayload) => {
             import('react-facebook-pixel')
                 .then((x) => x.default)
                 .then((ReactPixel) => {

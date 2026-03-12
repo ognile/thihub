@@ -1,4 +1,5 @@
 import React from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import ReactionBar from './ReactionBar';
 
@@ -54,8 +55,14 @@ export default function Post({ id, author, time, content, image, likes, comments
             {image && (
                 <div className="w-full bg-gray-100">
                     <Link href={`/articles/${id}`}>
-                        {/* Using standard img for now, can upgrade to Next Image later */}
-                        <img src={image} alt="Post content" className="w-full h-auto object-cover max-h-[500px]" />
+                        <Image
+                            unoptimized
+                            src={image}
+                            alt="Post content"
+                            width={1200}
+                            height={800}
+                            className="w-full h-auto object-cover max-h-[500px]"
+                        />
                     </Link>
                 </div>
             )}

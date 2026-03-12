@@ -1,269 +1,234 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { createClient } from '@/utils/supabase/server';
+import {
+    articleBlockSchema,
+    articleDocumentSchema,
+    DEFAULT_STYLE_PRESET,
+    normalizeHeroMeta,
+    type ArticleBlock,
+    type StylePreset,
+} from '@/lib/articles/schema';
+import { createBlockId } from '@/lib/articles/schema';
+import { createPersistedArticlePayload } from '@/lib/articles/service';
+import { normalizeArticleDocumentOnly } from '@/lib/articles/normalize';
 
-// Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// V1 Standard Blog Prompt
-const getV1Prompt = (rawText: string) => `
-            You are an expert content formatter and HTML structurer.
-            
-            YOUR TASK:
-            Take the provided RAW TEXT and format it into a JSON object for a health news site.
-            
-            CRITICAL RULE: ** DO NOT REWRITE THE CONTENT.**
-            -   You must use the EXACT wording from the raw text.
-            - Do NOT summarize, do NOT "optimize", do NOT change the tone.
-            - Your ONLY job is to apply HTML tags and extract the structure.
-            
-            INSTRUCTIONS FOR PARSING:
-        1. ** Headline **: Identify the main headline(usually the first line).Extract it exactly.
-            2. ** Subheadline **: Identify the subheadline(usually the second line).Extract it exactly.
-            3. ** Body Content **:
-                -   Take the rest of the text and format it as clean, semantic HTML.
-                -   **CRITICAL**: Do NOT add any new text, introductory phrases, or concluding remarks.
-                -   **CRITICAL**: Do NOT invent new headlines or subheadlines if they are not in the source text.
-                -   If a line looks like a subheadline (short, bold, or separate line), use <h2> or <h3>.
-                -   Use <blockquote> for testimonials, key quotes, or "callout" boxes.
-                -   Use <ul> or <ol> for lists.
-                -   Use <strong> and <em> for emphasis.
-                -   ** DO NOT ** include the title or subtitle in the "content" field.
-                -   ** DO NOT CHANGE A SINGLE WORD OF THE BODY TEXT.**
-            4. ** Key Takeaways **: Extract 3 distinct, punchy "Key Takeaways" from the text. (You may summarize here, but keep it close to the text).
-            5. ** Comments **: Generate 4 - 7 realistic comments from women(ages 35 - 65) discussing the topic / product.They should sound natural, not like bots.
+const requestSchema = z.object({
+    rawText: z.string().min(1, 'Raw text is required'),
+    slug: z.string().optional(),
+    pixelId: z.string().optional(),
+    ctaUrl: z.string().optional(),
+    stylePreset: z.literal(DEFAULT_STYLE_PRESET).optional(),
+});
 
-            OUTPUT JSON SCHEMA:
-        {
-            "title": "The Main Headline (Exact Match)",
-            "subtitle": "The Subheadline (Exact Match)",
-            "author": "Female Name (e.g. Sarah Jenkins)",
-            "reviewer": "Medical Doctor Name (e.g. Dr. A. Peterson, MD)",
-            "date": "Updated: 2 hours ago",
-            "content": "<p>First paragraph...</p>...",
-            "keyTakeaways": [
-                { "title": "Short Title", "content": "One sentence summary" }
-            ],
-            "comments": [
-                {
-                    "id": "c1",
-                    "author": "Name",
-                    "avatar": "https://picsum.photos/seed/c1/100",
-                    "content": "Comment text",
-                    "time": "2h",
-                    "likes": 45,
-                    "hasReplies": false,
-                    "isLiked": true
-                }
-            ]
+const generatedCommentSchema = z.object({
+    id: z.string(),
+    author: z.string(),
+    avatar: z.string(),
+    content: z.string(),
+    time: z.string(),
+    likes: z.number(),
+    hasReplies: z.boolean().optional(),
+    isLiked: z.boolean().optional(),
+});
+
+const generatedArticleSchema = z.object({
+    title: z.string().min(1),
+    subtitle: z.string().default(''),
+    author: z.string().default('Editorial Team'),
+    reviewer: z.string().default(''),
+    date: z.string().default(''),
+    blocks: z.array(z.unknown()).min(1),
+    comments: z.array(generatedCommentSchema).default([]),
+});
+
+function normalizeGeneratedBlocks(rawBlocks: unknown[]): ArticleBlock[] {
+    const normalized: ArticleBlock[] = [];
+
+    rawBlocks.forEach((rawBlock, index) => {
+        const candidate =
+            rawBlock && typeof rawBlock === 'object'
+                ? ({ ...(rawBlock as Record<string, unknown>) } as Record<string, unknown>)
+                : {};
+
+        if (typeof candidate.id !== 'string' || !candidate.id.trim()) {
+            candidate.id = createBlockId(`gen_${index}`);
+        }
+        if (typeof candidate.hidden !== 'boolean') {
+            candidate.hidden = false;
         }
 
-            RAW TEXT:
-            ${rawText}
-        `;
-
-// V2 Scientific Advertorial Prompt - Outputs structured JSON for rich components
-const getV2Prompt = (rawText: string) => `
-You are an expert content analyzer for high-conversion health advertorials.
-
-YOUR TASK:
-Analyze the provided RAW TEXT and structure it into rich UI components. DO NOT rewrite or change any text - only categorize and wrap existing content into the appropriate component types.
-
-CRITICAL RULES:
-1. ** PRESERVE ALL TEXT VERBATIM ** - Do not change a single word of the original content
-2. Your job is to DETECT the context/intent of each paragraph and assign it a component type
-3. The text content inside each component must be EXACTLY from the source
-
-COMPONENT TYPES TO USE:
-- "paragraph" - Standard text paragraphs
-- "heading" - Section headers (h2, h3 level)
-- "icon_list" - When text describes multiple benefits, features, or points (detect keywords like gut, bacteria, immune, energy, sleep, etc.)
-- "comparison_table" - When text compares product vs competitors or lists advantages
-- "timeline" - When text describes a journey, progression, or "week 1, week 2" style results
-- "testimonial" - Customer quotes, reviews, or personal stories
-- "image_placeholder" - Suggest an image where visual content would enhance understanding
-- "blockquote" - Important callouts or highlighted statements
-
-DETECTION GUIDELINES:
-- If you see a list of 3+ benefits with distinct topics, use "icon_list"
-- If you see comparisons or "unlike others" language, consider "comparison_table"
-- If you see time-based progression or "after X weeks", use "timeline"
-- If you see quotes with attribution or review-style content, use "testimonial"
-- When discussing scientific concepts (biofilm, bacteria, etc.), add "image_placeholder" with search query
-
-OUTPUT JSON SCHEMA:
-{
-    "title": "The Main Headline (Exact Match)",
-    "subtitle": "The Subheadline (Exact Match)",
-    "author": "Female Name",
-    "reviewer": "Medical Doctor Name (e.g. Dr. A. Peterson, MD)",
-    "date": "Updated: 2 hours ago",
-    "articleTheme": "v2",
-    "components": [
-        {
-            "type": "paragraph",
-            "content": "Exact paragraph text from source..."
-        },
-        {
-            "type": "heading",
-            "level": 2,
-            "content": "Section Title"
-        },
-        {
-            "type": "icon_list",
-            "items": [
-                { "icon": "bacteria", "title": "Short Title", "text": "The exact text about this point..." },
-                { "icon": "shield", "title": "Another Point", "text": "More exact text..." }
-            ]
-        },
-        {
-            "type": "comparison_table",
-            "ourBrand": "Our Formula",
-            "theirBrand": "Generic Brands",
-            "features": [
-                { "name": "Feature from text", "us": true, "them": false }
-            ]
-        },
-        {
-            "type": "timeline",
-            "title": "Your Journey",
-            "weeks": [
-                { "week": 1, "title": "Week 1 Title", "description": "Exact description..." }
-            ]
-        },
-        {
-            "type": "testimonial",
-            "helpedWith": "Category",
-            "title": "Testimonial headline if any",
-            "body": "The exact quote or review text...",
-            "author": "Name from text or generate realistic name"
-        },
-        {
-            "type": "image_placeholder",
-            "searchQuery": "descriptive search term for relevant image"
-        },
-        {
-            "type": "blockquote",
-            "content": "Important statement to highlight..."
+        if (candidate.type === 'image') {
+            if (candidate.imageUrl === undefined) candidate.imageUrl = null;
+            if (candidate.alt === undefined) candidate.alt = null;
+            if (typeof candidate.searchQuery !== 'string') candidate.searchQuery = 'article image';
         }
-    ],
-    "keyTakeaways": [
-        { "title": "Short Title", "content": "One sentence summary" }
-    ],
-    "comments": [
-        {
-            "id": "c1",
-            "author": "Name",
-            "avatar": "https://picsum.photos/seed/c1/100",
-            "content": "Comment text",
-            "time": "2h",
-            "likes": 45,
-            "hasReplies": false,
-            "isLiked": true
+
+        if (candidate.type === 'inline_cta') {
+            if (typeof candidate.title !== 'string') candidate.title = 'Curious about the science?';
+            if (typeof candidate.buttonText !== 'string') candidate.buttonText = 'Read the Clinical Study »';
+            if (typeof candidate.description !== 'string') candidate.description = 'Secure, verified link to official research.';
         }
-    ]
+
+        if (candidate.type === 'heading' && candidate.level !== 1 && candidate.level !== 2 && candidate.level !== 3) {
+            candidate.level = 2;
+        }
+
+        const parsed = articleBlockSchema.safeParse(candidate);
+        if (parsed.success) {
+            normalized.push(parsed.data);
+            return;
+        }
+
+        const fallbackText =
+            typeof candidate.text === 'string'
+                ? candidate.text
+                : typeof candidate.content === 'string'
+                    ? candidate.content
+                    : '';
+
+        normalized.push({
+            id: createBlockId(`fallback_${index}`),
+            hidden: false,
+            type: 'paragraph',
+            html: fallbackText,
+        });
+    });
+
+    return normalized;
 }
 
-ICON KEYWORDS FOR icon_list (use these for the "icon" field):
-- gut, stomach, digestion -> digestive topics
-- bacteria, probiotic, biofilm -> microbiome topics
-- immune, immunity, shield -> immune system
-- energy, zap -> energy/vitality
-- sleep, moon -> sleep quality
-- brain -> cognitive function
-- heart -> cardiovascular
-- inflammation, flame -> inflammation
-- vitamin, pill -> supplements
-- natural, leaf -> natural ingredients
-- quality, certified, tested -> quality assurance
-- warning, danger -> concerns/problems
-- check, star -> benefits/positives
+const generatorPrompt = (rawText: string, stylePreset: StylePreset) => `
+You are an expert content structuring assistant.
+
+Your task: transform the provided RAW TEXT into structured blocks for an article UI.
+
+Hard constraints:
+1) Preserve source text verbatim. Do not rewrite claims or wording.
+2) Only structure and classify text into blocks.
+3) Use this style preset: "${stylePreset}".
+4) Output strict JSON only.
+
+Return JSON with this schema:
+{
+  "title": "Main headline from source",
+  "subtitle": "Subheadline from source if present, else empty string",
+  "author": "Author name",
+  "reviewer": "Reviewer name",
+  "date": "Updated: ...",
+  "blocks": [
+    { "id": "b1", "type": "heading", "level": 2, "text": "..." },
+    { "id": "b2", "type": "paragraph", "html": "Exact paragraph text with optional inline tags" },
+    { "id": "b3", "type": "blockquote", "text": "..." },
+    { "id": "b4", "type": "icon_list", "columns": 2, "items": [{ "icon": "check", "title": "...", "text": "..." }] },
+    { "id": "b5", "type": "comparison_table", "ourBrand": "Our Formula", "theirBrand": "Generic Brands", "features": [{ "name": "...", "us": true, "them": false }] },
+    { "id": "b6", "type": "timeline", "title": "Your Journey", "weeks": [{ "week": 1, "title": "...", "description": "..." }] },
+    { "id": "b7", "type": "testimonial", "helpedWith": "...", "title": "...", "body": "...", "author": "...", "verified": true },
+    { "id": "b8", "type": "image", "searchQuery": "...", "imageUrl": null, "alt": null },
+    { "id": "b9", "type": "takeaways", "items": [{ "title": "...", "content": "..." }] },
+    { "id": "b10", "type": "inline_cta", "title": "Curious about the science?", "buttonText": "Read the Clinical Study »", "description": "Secure, verified link to official research." }
+  ],
+  "comments": [
+    { "id": "c1", "author": "...", "avatar": "https://picsum.photos/seed/c1/100", "content": "...", "time": "2h", "likes": 10, "hasReplies": false, "isLiked": false }
+  ]
+}
+
+Rules for block usage:
+- Use heading for section labels.
+- Use paragraph for body text.
+- Use blockquote for highlighted callouts.
+- Use icon_list for grouped benefits or repeated points.
+- Use comparison_table for side-by-side product comparisons.
+- Use timeline for week/day progression statements.
+- Use testimonial for quote-like personal stories.
+- Use image block with imageUrl=null and a useful searchQuery.
+- Include at most one takeaways block and one inline_cta block.
 
 RAW TEXT:
 ${rawText}
 `;
+
+function ensureRequiredBlocks(blocks: ArticleBlock[]): ArticleBlock[] {
+    const nextBlocks = [...blocks];
+
+    if (!nextBlocks.some((block) => block.type === 'inline_cta')) {
+        nextBlocks.push({
+            id: createBlockId('cta'),
+            hidden: false,
+            type: 'inline_cta',
+            title: 'Curious about the science?',
+            buttonText: 'Read the Clinical Study »',
+            description: 'Secure, verified link to official research.',
+        });
+    }
+
+    return nextBlocks;
+}
+
+function normalizeSlug(value: string): string {
+    return value
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/(^-|-$)+/g, '');
+}
 
 export async function POST(request: Request) {
     try {
         if (!process.env.GEMINI_API_KEY) {
             return NextResponse.json(
                 { error: 'GEMINI_API_KEY is not set in environment variables.' },
-                { status: 500 }
+                { status: 500 },
             );
         }
 
         const supabase = await createClient();
 
-        // Check authentication
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { rawText, pixelId, ctaUrl, slug: customSlug, theme = 'v1' } = await request.json();
-
-        if (!rawText) {
-            return NextResponse.json({ error: 'Raw text is required' }, { status: 400 });
-        }
+        const payload = requestSchema.parse(await request.json());
+        const stylePreset = payload.stylePreset ?? DEFAULT_STYLE_PRESET;
 
         const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
-
-        // Select prompt based on theme
-        const prompt = theme === 'v2' ? getV2Prompt(rawText) : getV1Prompt(rawText);
-
         const result = await model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json" }
+            contents: [{ role: 'user', parts: [{ text: generatorPrompt(payload.rawText, stylePreset) }] }],
+            generationConfig: { responseMimeType: 'application/json' },
         });
 
-        const response = result.response;
-        const text = response.text();
-        const generatedData = JSON.parse(text);
+        const text = result.response.text();
+        let parsedResponse: unknown;
 
-        // Determine Slug
-        let slug = customSlug;
+        try {
+            parsedResponse = JSON.parse(text);
+        } catch {
+            return NextResponse.json(
+                { error: 'Model returned malformed JSON. Please retry.' },
+                { status: 422 },
+            );
+        }
+
+        const generated = generatedArticleSchema.parse(parsedResponse);
+        const normalizedBlocks = normalizeGeneratedBlocks(generated.blocks);
+
+        const document = normalizeArticleDocumentOnly(articleDocumentSchema.parse({
+            schemaVersion: 1,
+            stylePreset,
+            blocks: ensureRequiredBlocks(normalizedBlocks),
+        }));
+
+        let slug = payload.slug ? normalizeSlug(payload.slug) : normalizeSlug(generated.title);
         if (!slug) {
-            slug = generatedData.title
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, '-')
-                .replace(/(^-|-$)+/g, '');
-        } else {
-            // Sanitize custom slug
-            slug = slug.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
+            slug = `article-${Date.now().toString(36)}`;
         }
 
-        // Process content based on theme
-        let finalContent: string;
-        
-        if (theme === 'v2' && generatedData.components) {
-            // Convert V2 components to Tiptap-compatible HTML with data attributes
-            finalContent = convertV2ComponentsToHTML(generatedData.components);
-        } else {
-            // V1 - use content directly
-            finalContent = generatedData.content;
-        }
-
-        const newArticle = {
-            slug: slug,
-            title: generatedData.title,
-            subtitle: generatedData.subtitle,
-            author: generatedData.author,
-            reviewer: generatedData.reviewer,
-            date: generatedData.date,
-            content: finalContent,
-            key_takeaways: generatedData.keyTakeaways,
-            comments: generatedData.comments,
-            image: "https://picsum.photos/seed/" + slug + "/800/600",
-            cta_text: "Check Availability »",
-            cta_title: "Curious about the science?",
-            cta_description: "Secure, verified link to official research.",
-            pixel_id: pixelId || "",
-            cta_url: ctaUrl || "",
-            article_theme: theme,
-            updated_at: new Date().toISOString()
-        };
-
-        // Check if slug exists
         const { data: existing } = await supabase
             .from('articles')
             .select('slug')
@@ -271,71 +236,50 @@ export async function POST(request: Request) {
             .single();
 
         if (existing) {
-            newArticle.slug = `${slug}-${Math.random().toString(36).substring(7)}`;
+            slug = `${slug}-${Math.random().toString(36).slice(2, 7)}`;
         }
 
-        const { error } = await supabase
-            .from('articles')
-            .insert(newArticle);
+        const persistedContent = createPersistedArticlePayload(document);
 
-        if (error) throw error;
+        const insertPayload = {
+            slug,
+            title: generated.title,
+            subtitle: generated.subtitle,
+            author: generated.author,
+            reviewer: generated.reviewer,
+            date: generated.date,
+            image: `https://picsum.photos/seed/${slug}/800/600`,
+            hero_meta: normalizeHeroMeta(undefined),
+            author_image: null,
+            pixel_id: payload.pixelId || '',
+            cta_url: payload.ctaUrl || '',
+            comments: generated.comments,
+            ...persistedContent,
+            updated_at: new Date().toISOString(),
+        };
 
-        return NextResponse.json({ success: true, slug: newArticle.slug });
+        const { error: insertError } = await supabase.from('articles').insert(insertPayload);
 
+        if (insertError) {
+            throw insertError;
+        }
+
+        return NextResponse.json({ success: true, slug });
     } catch (error) {
-        console.error('Error generating article:', error);
-        return NextResponse.json(
-            { error: 'Failed to generate article' },
-            { status: 500 }
-        );
-    }
-}
-
-// Convert V2 components array to Tiptap-compatible HTML
-function convertV2ComponentsToHTML(components: any[]): string {
-    return components.map(component => {
-        switch (component.type) {
-            case 'paragraph':
-                return `<p>${component.content}</p>`;
-            
-            case 'heading':
-                const level = component.level || 2;
-                return `<h${level}>${component.content}</h${level}>`;
-            
-            case 'icon_list':
-                // Store as data attribute for Tiptap to parse
-                const iconListData = JSON.stringify(component.items);
-                return `<div data-type="icon-list" data-items='${iconListData}' data-columns="${component.columns || 2}"></div>`;
-            
-            case 'comparison_table':
-                const tableData = JSON.stringify(component.features);
-                return `<div data-type="comparison-table" data-features='${tableData}' data-our-brand="${component.ourBrand || 'Our Formula'}" data-their-brand="${component.theirBrand || 'Generic Brands'}"></div>`;
-            
-            case 'timeline':
-                const timelineData = JSON.stringify(component.weeks);
-                return `<div data-type="timeline" data-weeks='${timelineData}' data-title="${component.title || 'Your Journey'}"></div>`;
-            
-            case 'testimonial':
-                return `<div data-type="testimonial" data-helped-with="${component.helpedWith || 'Overall Health'}" data-title="${component.title || ''}" data-body="${escapeHtml(component.body)}" data-author="${component.author || 'Anonymous'}"></div>`;
-            
-            case 'image_placeholder':
-                return `<div data-type="image-placeholder" data-search-query="${component.searchQuery}"></div>`;
-            
-            case 'blockquote':
-                return `<blockquote>${component.content}</blockquote>`;
-            
-            default:
-                return `<p>${component.content || ''}</p>`;
+        if (error instanceof z.ZodError) {
+            return NextResponse.json(
+                {
+                    error: 'Validation error while generating article.',
+                    details: error.issues.map((issue) => ({
+                        path: issue.path.join('.'),
+                        message: issue.message,
+                    })),
+                },
+                { status: 422 },
+            );
         }
-    }).join('\n');
-}
 
-function escapeHtml(text: string): string {
-    if (!text) return '';
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+        console.error('Error generating article:', error);
+        return NextResponse.json({ error: 'Failed to generate article' }, { status: 500 });
+    }
 }

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { motion, useAnimationFrame } from 'framer-motion';
+import { useState, useRef, useEffect } from 'react';
+import { motion, useAnimationFrame, useMotionValue } from 'framer-motion';
 import { FileText } from 'lucide-react';
 
 interface StatItem {
@@ -20,11 +20,25 @@ const stats: StatItem[] = [
 export default function DataTicker() {
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const [isPaused, setIsPaused] = useState(false);
-    const positionRef = useRef(0);
+    const tickerCopyRef = useRef<HTMLDivElement | null>(null);
+    const loopWidthRef = useRef(0);
+    const x = useMotionValue(0);
+
+    useEffect(() => {
+        const updateLoopWidth = () => {
+            loopWidthRef.current = tickerCopyRef.current?.scrollWidth ?? 0;
+        };
+
+        updateLoopWidth();
+        window.addEventListener('resize', updateLoopWidth);
+
+        return () => window.removeEventListener('resize', updateLoopWidth);
+    }, []);
 
     useAnimationFrame((_, delta) => {
-        if (!isPaused) {
-            positionRef.current -= delta * 0.05; // Scroll speed
+        if (!isPaused && loopWidthRef.current > 0) {
+            const next = x.get() - delta * 0.05;
+            x.set(next <= -loopWidthRef.current ? 0 : next);
         }
     });
 
@@ -45,9 +59,9 @@ export default function DataTicker() {
                     {[...Array(3)].map((_, copyIndex) => (
                         <motion.div
                             key={copyIndex}
+                            ref={copyIndex === 0 ? tickerCopyRef : undefined}
                             className="flex gap-8"
-                            animate={{ x: positionRef.current }}
-                            transition={{ type: 'tween', duration: 0 }}
+                            style={{ x }}
                         >
                             {stats.map((stat, index) => {
                                 const globalIndex = copyIndex * stats.length + index;

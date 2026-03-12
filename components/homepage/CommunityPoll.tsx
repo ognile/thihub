@@ -53,10 +53,10 @@ export default function CommunityPoll() {
                         <span className="text-sm font-bold">Live Community Poll</span>
                     </div>
                     <h2 className="text-4xl md:text-5xl font-serif font-bold text-gray-900 mb-4">
-                        What's Your Most Frustrating Symptom Today?
+                        What&apos;s Your Most Frustrating Symptom Today?
                     </h2>
                     <p className="text-lg text-gray-600">
-                        Join {totalVotes.toLocaleString()}+ women who've shared their experience.
+                        Join {totalVotes.toLocaleString()}+ women who&apos;ve shared their experience.
                     </p>
                 </motion.div>
 
@@ -156,7 +156,7 @@ export default function CommunityPoll() {
                             className="mt-8 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-600"
                         >
                             <p className="text-sm text-gray-700">
-                                <strong>You're not alone.</strong> Thousands of women are experiencing the same challenges.
+                                <strong>You&apos;re not alone.</strong> Thousands of women are experiencing the same challenges.
                                 Understanding the science behind these symptoms is the first step toward relief.
                             </p>
                         </motion.div>
