@@ -62,6 +62,15 @@ h6 {
   font-family: var(--font-serif);
 }
 
+[data-quiz-shell="monochrome"] h1,
+[data-quiz-shell="monochrome"] h2,
+[data-quiz-shell="monochrome"] h3,
+[data-quiz-shell="monochrome"] h4,
+[data-quiz-shell="monochrome"] h5,
+[data-quiz-shell="monochrome"] h6 {
+  font-family: var(--font-sans) !important;
+}
+
 /* Article Content Styling */
 .prose p {
   margin-bottom: 1.5em;

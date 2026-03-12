@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const QUIZ_SCHEMA_VERSION = "quiz-funnel.v1";
+export const QUIZ_SCHEMA_VERSION = "quiz-funnel.v2";
 
 const identifierSchema = z
   .string()
@@ -8,7 +8,7 @@ const identifierSchema = z
   .max(80)
   .regex(/^[a-z0-9-]+$/, "ids must use lowercase letters, digits, and hyphens");
 
-const textLineSchema = z.string().min(1).max(160);
+const textLineSchema = z.string().min(1).max(180);
 const textBlockSchema = z.string().min(1).max(2400);
 const optionalUrlSchema = z
   .string()
@@ -16,21 +16,11 @@ const optionalUrlSchema = z
   .or(z.literal(""))
   .optional()
   .transform((value) => (value && value.length > 0 ? value : undefined));
-const hexColorSchema = z
-  .string()
-  .regex(/^#(?:[0-9a-fA-F]{3}){1,2}$/, "expected hex color");
 
 export const quizThemeSchema = z.object({
-  shell: textLineSchema,
-  displayFont: textLineSchema,
-  bodyFont: textLineSchema,
-  canvasColor: hexColorSchema,
-  panelColor: hexColorSchema,
-  inkColor: hexColorSchema,
-  accentColor: hexColorSchema,
-  accentSoftColor: hexColorSchema,
-  edgeColor: hexColorSchema,
-  successColor: hexColorSchema,
+  variant: z.literal("monochrome-premium"),
+  typeface: z.literal("sans"),
+  motion: z.literal("smooth"),
 });
 
 export const quizEntrypointSchema = z.object({
@@ -38,6 +28,19 @@ export const quizEntrypointSchema = z.object({
   label: textLineSchema,
   source: textLineSchema,
   pathHint: textLineSchema,
+});
+
+const resultMetricSchema = z.object({
+  id: identifierSchema,
+  label: textLineSchema,
+  value: z.number().int().min(1).max(100),
+});
+
+const resultCriterionSchema = z.object({
+  id: identifierSchema,
+  label: textLineSchema,
+  detail: textBlockSchema,
+  emphasis: z.enum(["high", "steady", "watch"]),
 });
 
 export const quizResultProfileSchema = z.object({
@@ -51,6 +54,10 @@ export const quizResultProfileSchema = z.object({
   educationBullets: z.array(textLineSchema).min(3).max(6),
   dopamineCandies: z.array(textLineSchema).min(2).max(5),
   offerBridge: textBlockSchema,
+  graphTitle: textLineSchema,
+  graphCaption: textBlockSchema,
+  metrics: z.array(resultMetricSchema).min(3).max(5),
+  criteria: z.array(resultCriterionSchema).min(3).max(5),
 });
 
 export const quizLeadFieldSchema = z.object({
@@ -71,9 +78,22 @@ const questionOptionSchema = z.object({
   resultWeights: z.record(identifierSchema, z.number().int().min(0).max(5)),
 });
 
+const messageHighlightSchema = z.object({
+  id: identifierSchema,
+  label: textLineSchema,
+  value: textLineSchema,
+});
+
+const analysisStageSchema = z.object({
+  id: identifierSchema,
+  label: textLineSchema,
+  description: textLineSchema.optional(),
+  durationMs: z.number().int().min(200).max(8000),
+});
+
 const baseStepSchema = z.object({
   id: identifierSchema,
-  kind: z.enum(["welcome", "question", "insight", "result", "lead", "offer"]),
+  kind: z.enum(["welcome", "question", "message", "analysis", "result", "lead", "offer"]),
   kicker: textLineSchema.optional(),
   title: textLineSchema,
   body: textBlockSchema.optional(),
@@ -95,12 +115,18 @@ const questionStepSchema = baseStepSchema.extend({
   options: z.array(questionOptionSchema).min(2).max(6),
 });
 
-const insightStepSchema = baseStepSchema.extend({
-  kind: z.literal("insight"),
+const messageStepSchema = baseStepSchema.extend({
+  kind: z.literal("message"),
   primaryLabel: textLineSchema,
-  bullets: z.array(textLineSchema).min(2).max(5),
-  quoteText: textBlockSchema.optional(),
-  quoteAttribution: textLineSchema.optional(),
+  secondaryLabel: textLineSchema.optional(),
+  bullets: z.array(textLineSchema).min(1).max(4).optional(),
+  highlights: z.array(messageHighlightSchema).min(1).max(3).optional(),
+});
+
+const analysisStepSchema = baseStepSchema.extend({
+  kind: z.literal("analysis"),
+  autoAdvance: z.boolean().default(true),
+  stages: z.array(analysisStageSchema).min(2).max(6),
 });
 
 const resultStepSchema = baseStepSchema.extend({
@@ -131,11 +157,31 @@ const offerStepSchema = baseStepSchema.extend({
 export const quizStepSchema = z.discriminatedUnion("kind", [
   welcomeStepSchema,
   questionStepSchema,
-  insightStepSchema,
+  messageStepSchema,
+  analysisStepSchema,
   resultStepSchema,
   leadStepSchema,
   offerStepSchema,
 ]);
+
+function assertUniqueIds(
+  items: Array<{ id: string }>,
+  ctx: z.RefinementCtx,
+  path: Array<string | number>,
+  label: string,
+) {
+  const ids = new Set<string>();
+  items.forEach((item, index) => {
+    if (ids.has(item.id)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `duplicate ${label} id: ${item.id}`,
+        path: [...path, index, "id"],
+      });
+    }
+    ids.add(item.id);
+  });
+}
 
 export const quizDefinitionSchema = z
   .object({
@@ -152,28 +198,14 @@ export const quizDefinitionSchema = z
   .superRefine((definition, ctx) => {
     const stepIds = new Set<string>();
     const resultIds = new Set<string>();
-    const entrypointIds = new Set<string>();
 
-    definition.results.forEach((result, index) => {
-      if (resultIds.has(result.id)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `duplicate result id: ${result.id}`,
-          path: ["results", index, "id"],
-        });
-      }
+    assertUniqueIds(definition.entrypoints, ctx, ["entrypoints"], "entrypoint");
+    assertUniqueIds(definition.results, ctx, ["results"], "result");
+
+    definition.results.forEach((result, resultIndex) => {
       resultIds.add(result.id);
-    });
-
-    definition.entrypoints.forEach((entrypoint, index) => {
-      if (entrypointIds.has(entrypoint.id)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `duplicate entrypoint id: ${entrypoint.id}`,
-          path: ["entrypoints", index, "id"],
-        });
-      }
-      entrypointIds.add(entrypoint.id);
+      assertUniqueIds(result.metrics, ctx, ["results", resultIndex, "metrics"], "result metric");
+      assertUniqueIds(result.criteria, ctx, ["results", resultIndex, "criteria"], "result criterion");
     });
 
     definition.steps.forEach((step, stepIndex) => {
@@ -187,17 +219,8 @@ export const quizDefinitionSchema = z
       stepIds.add(step.id);
 
       if (step.kind === "question") {
-        const optionIds = new Set<string>();
+        assertUniqueIds(step.options, ctx, ["steps", stepIndex, "options"], "option");
         step.options.forEach((option, optionIndex) => {
-          if (optionIds.has(option.id)) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: `duplicate option id: ${option.id}`,
-              path: ["steps", stepIndex, "options", optionIndex, "id"],
-            });
-          }
-          optionIds.add(option.id);
-
           Object.keys(option.resultWeights).forEach((resultId) => {
             if (!resultIds.has(resultId)) {
               ctx.addIssue({
@@ -209,12 +232,28 @@ export const quizDefinitionSchema = z
           });
         });
       }
+
+      if (step.kind === "message" && step.highlights) {
+        assertUniqueIds(step.highlights, ctx, ["steps", stepIndex, "highlights"], "message highlight");
+      }
+
+      if (step.kind === "analysis") {
+        assertUniqueIds(step.stages, ctx, ["steps", stepIndex, "stages"], "analysis stage");
+      }
     });
 
     if (!definition.steps.some((step) => step.kind === "result")) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "at least one result step is required",
+        path: ["steps"],
+      });
+    }
+
+    if (!definition.steps.some((step) => step.kind === "analysis")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "at least one analysis step is required",
         path: ["steps"],
       });
     }
@@ -265,16 +304,22 @@ export function parseQuizDefinition(input: unknown): QuizDefinition {
 export function getQuizStructureFingerprint(definition: QuizDefinition): string {
   const shape = {
     slug: definition.slug,
+    theme: definition.theme,
     results: definition.results.map((result) => result.id),
     steps: definition.steps.map((step) => ({
       id: step.id,
       kind: step.kind,
       next: step.next ?? null,
       optionIds: step.kind === "question" ? step.options.map((option) => option.id) : [],
-      optionNext: step.kind === "question"
-        ? step.options.map((option) => ({ id: option.id, next: option.next ?? null }))
-        : [],
+      optionNext:
+        step.kind === "question"
+          ? step.options.map((option) => ({ id: option.id, next: option.next ?? null }))
+          : [],
       leadFieldIds: step.kind === "lead" ? step.fields.map((field) => field.id) : [],
+      analysisStages:
+        step.kind === "analysis"
+          ? step.stages.map((stage) => ({ id: stage.id, durationMs: stage.durationMs }))
+          : [],
     })),
   };
 

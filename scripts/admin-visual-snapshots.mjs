@@ -88,7 +88,10 @@ async function resolveQuizId(context) {
       return null;
     }
 
-    const first = payload[0];
+    const preferredSlug = process.env.REGRESSION_QUIZ_SLUG ?? '';
+    const first = preferredSlug
+      ? payload.find((item) => item?.slug === preferredSlug) ?? payload[0]
+      : payload[0];
     return typeof first?.id === 'string' && first.id.length > 0 ? first.id : null;
   } catch {
     return null;

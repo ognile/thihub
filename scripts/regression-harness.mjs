@@ -311,9 +311,13 @@ if (QUIZ_SLUG) {
     assert(quizApi.response.status === 200, `Expected 200 but received ${quizApi.response.status}`);
     assert(quiz && typeof quiz === "object", "Expected quiz payload object");
     assert(typeof quiz.id === "string" && quiz.id.length > 0, "Expected quiz id");
+    assert(quiz.definition?.schemaVersion === "quiz-funnel.v2", `Expected quiz-funnel.v2 but received ${quiz.definition?.schemaVersion}`);
     assert(Array.isArray(quiz.definition?.steps), "Expected steps array");
     assert(quiz.definition.steps.length >= 13, "Expected at least 13 quiz steps");
     assert(Array.isArray(quiz.definition?.entrypoints) && quiz.definition.entrypoints.length >= 3, "Expected at least 3 entrypoints");
+    assert(quiz.definition?.theme?.variant === "monochrome-premium", "Expected monochrome premium theme");
+    assert(quiz.definition.steps.some((step) => step.kind === "message"), "Expected at least one message step");
+    assert(quiz.definition.steps.some((step) => step.kind === "analysis"), "Expected at least one analysis step");
   });
 
   if (QUIZ_DB_READY && quiz && typeof quiz === "object") {

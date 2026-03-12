@@ -2,12 +2,13 @@
 
 import { use, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { ExternalLink, Monitor, RotateCcw, Smartphone } from "lucide-react";
+import QuizExperience from "@/components/quiz/QuizExperience";
+import AdminStatusBadge from "@/components/admin/ui/AdminStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -15,7 +16,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import AdminStatusBadge from "@/components/admin/ui/AdminStatusBadge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import type { QuizDefinition, QuizResultProfile, QuizStep } from "@/lib/quizzes/schema";
 
 interface QuizDefinitionRecord {
@@ -38,6 +41,8 @@ export default function QuizDefinitionEditor({ params }: { params: Promise<{ id:
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [previewViewport, setPreviewViewport] = useState<"mobile" | "desktop">("mobile");
+  const [previewKey, setPreviewKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,7 +78,10 @@ export default function QuizDefinitionEditor({ params }: { params: Promise<{ id:
 
   const syncQuiz = (mutator: (draft: QuizDefinitionRecord) => void) => {
     setQuiz((current) => {
-      if (!current) return current;
+      if (!current) {
+        return current;
+      }
+
       const draft = structuredClone(current) as QuizDefinitionRecord;
       mutator(draft);
       draft.name = draft.definition.name;
@@ -83,7 +91,10 @@ export default function QuizDefinitionEditor({ params }: { params: Promise<{ id:
   };
 
   const handleSave = async () => {
-    if (!quiz) return;
+    if (!quiz) {
+      return;
+    }
+
     setIsSaving(true);
     setSaveMessage(null);
     setError(null);
@@ -119,16 +130,16 @@ export default function QuizDefinitionEditor({ params }: { params: Promise<{ id:
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-48 rounded-3xl" />
-        <Skeleton className="h-[480px] rounded-3xl" />
+        <Skeleton className="h-10 w-72" />
+        <Skeleton className="h-[920px] rounded-[1.8rem]" />
+        <Skeleton className="h-[420px] rounded-[1.8rem]" />
       </div>
     );
   }
 
   if (!quiz) {
     return (
-      <Card className="rounded-3xl">
+      <Card className="rounded-[1.8rem]">
         <CardHeader>
           <CardTitle>quiz definition missing</CardTitle>
           <CardDescription>{error ?? "no quiz definition returned"}</CardDescription>
@@ -140,16 +151,17 @@ export default function QuizDefinitionEditor({ params }: { params: Promise<{ id:
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">thin admin editor</p>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">quiz reset editor</p>
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-black tracking-tight">{quiz.definition.name}</h1>
             <AdminStatusBadge status={quiz.status} />
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            structure is locked to cli publish. browser editing is limited to copy, theme, results, and publish state.
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            production and preview share the same renderer. structure stays locked to cli publish. browser editing is for copy, result content, and publish state.
           </p>
         </div>
+
         <div className="flex flex-wrap gap-3">
           <Button asChild variant="outline">
             <Link href={`/admin/quizzes/${quiz.id}/analytics`}>analytics</Link>
@@ -158,6 +170,7 @@ export default function QuizDefinitionEditor({ params }: { params: Promise<{ id:
             <Button asChild variant="outline">
               <Link href={`/quiz/${quiz.slug}`} target="_blank">
                 open live funnel
+                <ExternalLink className="h-4 w-4" strokeWidth={1.2} />
               </Link>
             </Button>
           ) : null}
@@ -170,86 +183,139 @@ export default function QuizDefinitionEditor({ params }: { params: Promise<{ id:
       {error ? <Banner tone="error" text={error} /> : null}
       {saveMessage ? <Banner tone="success" text={saveMessage} /> : null}
 
-      <Card className="rounded-[1.8rem]">
-        <CardHeader>
-          <CardTitle>metadata and publish state</CardTitle>
-          <CardDescription>slug and structure are controlled by the git spec. content and publish state are editable here.</CardDescription>
+      <Card className="rounded-[1.8rem] border-border/70">
+        <CardHeader className="gap-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <CardTitle>production-accurate preview</CardTitle>
+              <CardDescription>
+                preview runs the same monochrome renderer as production. desktop mode keeps the mobile-first stage centered instead of inventing a second layout.
+              </CardDescription>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant={previewViewport === "mobile" ? "default" : "outline"}
+                onClick={() => setPreviewViewport("mobile")}
+              >
+                <Smartphone className="h-4 w-4" strokeWidth={1.2} />
+                mobile
+              </Button>
+              <Button
+                type="button"
+                variant={previewViewport === "desktop" ? "default" : "outline"}
+                onClick={() => setPreviewViewport("desktop")}
+              >
+                <Monitor className="h-4 w-4" strokeWidth={1.2} />
+                desktop
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setPreviewKey((current) => current + 1)}>
+                <RotateCcw className="h-4 w-4" strokeWidth={1.2} />
+                restart preview
+              </Button>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="grid gap-5 lg:grid-cols-2">
-          <Field label="name">
-            <Input
-              value={quiz.definition.name}
-              onChange={(event) =>
-                syncQuiz((draft) => {
-                  draft.definition.name = event.target.value;
-                })
-              }
+        <CardContent>
+          <div
+            className={cn(
+              "mx-auto transition-all duration-200",
+              previewViewport === "mobile" ? "max-w-[430px]" : "max-w-[900px]",
+            )}
+          >
+            <QuizExperience
+              key={`${quiz.id}-${previewKey}`}
+              articleSlug={null}
+              className="rounded-[1.8rem]"
+              embedded
+              entrySource="admin-preview"
+              mode="preview"
+              quiz={quiz.definition}
+              quizId={quiz.id}
             />
-          </Field>
-          <Field label="status">
-            <Select
-              value={quiz.status}
-              onValueChange={(value) =>
-                syncQuiz((draft) => {
-                  draft.status = value as QuizDefinitionRecord["status"];
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="draft">draft</SelectItem>
-                <SelectItem value="published">published</SelectItem>
-                <SelectItem value="archived">archived</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="slug">
-            <Input value={quiz.slug} disabled />
-          </Field>
-          <Field label="schema version">
-            <Input value={quiz.schemaVersion} disabled />
-          </Field>
-          <div className="lg:col-span-2">
-            <Field label="description">
-              <Textarea
-                value={quiz.definition.description}
-                rows={4}
-                onChange={(event) =>
-                  syncQuiz((draft) => {
-                    draft.definition.description = event.target.value;
-                  })
-                }
-              />
-            </Field>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="rounded-[1.8rem]">
-        <CardHeader>
-          <CardTitle>theme tokens</CardTitle>
-          <CardDescription>these drive the public funnel without changing the flow contract.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          <ThemeField quiz={quiz} syncQuiz={syncQuiz} token="shell" />
-          <ThemeField quiz={quiz} syncQuiz={syncQuiz} token="displayFont" />
-          <ThemeField quiz={quiz} syncQuiz={syncQuiz} token="bodyFont" />
-          <ThemeField quiz={quiz} syncQuiz={syncQuiz} token="canvasColor" />
-          <ThemeField quiz={quiz} syncQuiz={syncQuiz} token="panelColor" />
-          <ThemeField quiz={quiz} syncQuiz={syncQuiz} token="inkColor" />
-          <ThemeField quiz={quiz} syncQuiz={syncQuiz} token="accentColor" />
-          <ThemeField quiz={quiz} syncQuiz={syncQuiz} token="accentSoftColor" />
-          <ThemeField quiz={quiz} syncQuiz={syncQuiz} token="edgeColor" />
-          <ThemeField quiz={quiz} syncQuiz={syncQuiz} token="successColor" />
-        </CardContent>
-      </Card>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <Card className="rounded-[1.8rem]">
+          <CardHeader>
+            <CardTitle>metadata and publish state</CardTitle>
+            <CardDescription>slug and structure are controlled by the git spec. publish state stays editable here.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-5 lg:grid-cols-2">
+            <Field label="name">
+              <Input
+                value={quiz.definition.name}
+                onChange={(event) =>
+                  syncQuiz((draft) => {
+                    draft.definition.name = event.target.value;
+                  })
+                }
+              />
+            </Field>
+            <Field label="status">
+              <Select
+                value={quiz.status}
+                onValueChange={(value) =>
+                  syncQuiz((draft) => {
+                    draft.status = value as QuizDefinitionRecord["status"];
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">draft</SelectItem>
+                  <SelectItem value="published">published</SelectItem>
+                  <SelectItem value="archived">archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="slug">
+              <Input value={quiz.slug} disabled />
+            </Field>
+            <Field label="schema version">
+              <Input value={quiz.schemaVersion} disabled />
+            </Field>
+            <div className="lg:col-span-2">
+              <Field label="description">
+                <Textarea
+                  rows={4}
+                  value={quiz.definition.description}
+                  onChange={(event) =>
+                    syncQuiz((draft) => {
+                      draft.definition.description = event.target.value;
+                    })
+                  }
+                />
+              </Field>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[1.8rem]">
+          <CardHeader>
+            <CardTitle>locked design system</CardTitle>
+            <CardDescription>theme drift is intentionally removed from admin. this funnel ships on one approved visual system only.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <ReadonlyField label="variant" value={quiz.definition.theme.variant} />
+            <ReadonlyField label="typeface" value={quiz.definition.theme.typeface} />
+            <ReadonlyField label="motion" value={quiz.definition.theme.motion} />
+            <div className="rounded-[1.4rem] border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+              monochrome shell, sans-only typography, single dominant stage, lucide at `1.2`, no right rail, no freeform admin token editing.
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card className="rounded-[1.8rem]">
         <CardHeader>
           <CardTitle>results</CardTitle>
-          <CardDescription>result messaging is fully editable. result ids and weighting stay locked to the cli spec.</CardDescription>
+          <CardDescription>result messaging, graph copy, metrics, and criteria stay editable. result ids and scoring remain locked to the cli spec.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {quiz.definition.results.map((result) => (
@@ -271,7 +337,7 @@ export default function QuizDefinitionEditor({ params }: { params: Promise<{ id:
       <Card className="rounded-[1.8rem]">
         <CardHeader>
           <CardTitle>step content</CardTitle>
-          <CardDescription>step order, ids, branching, and option ids are locked. content stays editable.</CardDescription>
+          <CardDescription>step order, ids, branching, and timings stay locked. copy and step-facing content stay editable.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {quiz.definition.steps.map((step, index) => (
@@ -310,11 +376,12 @@ export default function QuizDefinitionEditor({ params }: { params: Promise<{ id:
 function Banner({ tone, text }: { tone: "success" | "error"; text: string }) {
   return (
     <div
-      className={`rounded-2xl border px-4 py-3 text-sm ${
+      className={cn(
+        "rounded-2xl border px-4 py-3 text-sm",
         tone === "success"
           ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-          : "border-red-300 bg-red-50 text-red-700"
-      }`}
+          : "border-red-300 bg-red-50 text-red-700",
+      )}
     >
       {text}
     </div>
@@ -330,26 +397,12 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function ThemeField({
-  quiz,
-  syncQuiz,
-  token,
-}: {
-  quiz: QuizDefinitionRecord;
-  syncQuiz: (mutator: (draft: QuizDefinitionRecord) => void) => void;
-  token: keyof QuizDefinition["theme"];
-}) {
+function ReadonlyField({ label, value }: { label: string; value: string }) {
   return (
-    <Field label={token}>
-      <Input
-        value={quiz.definition.theme[token]}
-        onChange={(event) =>
-          syncQuiz((draft) => {
-            draft.definition.theme[token] = event.target.value as never;
-          })
-        }
-      />
-    </Field>
+    <div className="rounded-[1.4rem] border border-border bg-muted/20 p-4">
+      <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
+      <p className="mt-2 text-sm font-medium text-foreground">{value}</p>
+    </div>
   );
 }
 
@@ -372,6 +425,7 @@ function ResultEditor({
           <p className="text-xl font-black">{result.label}</p>
         </div>
       </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Field label="label">
           <Input value={result.label} onChange={(event) => update("label", event.target.value)} />
@@ -386,41 +440,148 @@ function ResultEditor({
         </div>
         <div className="lg:col-span-2">
           <Field label="affirmation">
-            <Textarea value={result.affirmation} rows={3} onChange={(event) => update("affirmation", event.target.value)} />
+            <Textarea rows={3} value={result.affirmation} onChange={(event) => update("affirmation", event.target.value)} />
           </Field>
         </div>
         <div className="lg:col-span-2">
           <Field label="summary">
-            <Textarea value={result.summary} rows={4} onChange={(event) => update("summary", event.target.value)} />
+            <Textarea rows={4} value={result.summary} onChange={(event) => update("summary", event.target.value)} />
           </Field>
         </div>
         <div className="lg:col-span-2">
           <Field label="mechanism">
-            <Textarea value={result.mechanism} rows={4} onChange={(event) => update("mechanism", event.target.value)} />
+            <Textarea rows={4} value={result.mechanism} onChange={(event) => update("mechanism", event.target.value)} />
           </Field>
         </div>
         <div className="lg:col-span-2">
           <Field label="education bullets">
-            <Textarea
-              value={result.educationBullets.join("\n")}
-              rows={4}
-              onChange={(event) => update("educationBullets", toLines(event.target.value))}
-            />
+            <Textarea rows={4} value={result.educationBullets.join("\n")} onChange={(event) => update("educationBullets", toLines(event.target.value))} />
           </Field>
         </div>
         <div className="lg:col-span-2">
           <Field label="dopamine candies">
-            <Textarea
-              value={result.dopamineCandies.join("\n")}
-              rows={4}
-              onChange={(event) => update("dopamineCandies", toLines(event.target.value))}
-            />
+            <Textarea rows={4} value={result.dopamineCandies.join("\n")} onChange={(event) => update("dopamineCandies", toLines(event.target.value))} />
           </Field>
         </div>
         <div className="lg:col-span-2">
           <Field label="offer bridge">
-            <Textarea value={result.offerBridge} rows={4} onChange={(event) => update("offerBridge", event.target.value)} />
+            <Textarea rows={4} value={result.offerBridge} onChange={(event) => update("offerBridge", event.target.value)} />
           </Field>
+        </div>
+        <Field label="graph title">
+          <Input value={result.graphTitle} onChange={(event) => update("graphTitle", event.target.value)} />
+        </Field>
+        <div className="lg:col-span-1">
+          <Field label="graph caption">
+            <Textarea rows={3} value={result.graphCaption} onChange={(event) => update("graphCaption", event.target.value)} />
+          </Field>
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="space-y-4">
+          <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">graph metrics</p>
+          {result.metrics.map((metric) => (
+            <div key={metric.id} className="rounded-[1.25rem] border border-border bg-white p-4">
+              <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{metric.id}</p>
+              <div className="mt-3 grid gap-4">
+                <Field label="label">
+                  <Input
+                    value={metric.label}
+                    onChange={(event) =>
+                      update(
+                        "metrics",
+                        result.metrics.map((candidate) =>
+                          candidate.id === metric.id ? { ...candidate, label: event.target.value } : candidate,
+                        ),
+                      )
+                    }
+                  />
+                </Field>
+                <Field label="value">
+                  <Input
+                    type="number"
+                    value={metric.value}
+                    onChange={(event) =>
+                      update(
+                        "metrics",
+                        result.metrics.map((candidate) =>
+                          candidate.id === metric.id
+                            ? { ...candidate, value: clampMetricValue(event.target.value) }
+                            : candidate,
+                        ),
+                      )
+                    }
+                  />
+                </Field>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-4">
+          <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">criteria cards</p>
+          {result.criteria.map((criterion) => (
+            <div key={criterion.id} className="rounded-[1.25rem] border border-border bg-white p-4">
+              <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{criterion.id}</p>
+              <div className="mt-3 grid gap-4">
+                <Field label="label">
+                  <Input
+                    value={criterion.label}
+                    onChange={(event) =>
+                      update(
+                        "criteria",
+                        result.criteria.map((candidate) =>
+                          candidate.id === criterion.id ? { ...candidate, label: event.target.value } : candidate,
+                        ),
+                      )
+                    }
+                  />
+                </Field>
+                <Field label="emphasis">
+                  <Select
+                    value={criterion.emphasis}
+                    onValueChange={(value) =>
+                      update(
+                        "criteria",
+                        result.criteria.map((candidate) =>
+                          candidate.id === criterion.id
+                            ? {
+                                ...candidate,
+                                emphasis: value as QuizResultProfile["criteria"][number]["emphasis"],
+                              }
+                            : candidate,
+                        ),
+                      )
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="high">high</SelectItem>
+                      <SelectItem value="steady">steady</SelectItem>
+                      <SelectItem value="watch">watch</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="detail">
+                  <Textarea
+                    rows={4}
+                    value={criterion.detail}
+                    onChange={(event) =>
+                      update(
+                        "criteria",
+                        result.criteria.map((candidate) =>
+                          candidate.id === criterion.id ? { ...candidate, detail: event.target.value } : candidate,
+                        ),
+                      )
+                    }
+                  />
+                </Field>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -448,6 +609,7 @@ function StepEditor({
           <Input value={step.title} onChange={(event) => update("title", event.target.value as never)} />
         </Field>
       </div>
+
       <Field label="body">
         <Textarea value={step.body ?? ""} rows={4} onChange={(event) => update("body", event.target.value as never)} />
       </Field>
@@ -463,11 +625,7 @@ function StepEditor({
             </Field>
           </div>
           <Field label="trust points">
-            <Textarea
-              value={step.trustPoints.join("\n")}
-              rows={4}
-              onChange={(event) => onChange({ ...step, trustPoints: toLines(event.target.value) })}
-            />
+            <Textarea value={step.trustPoints.join("\n")} rows={4} onChange={(event) => onChange({ ...step, trustPoints: toLines(event.target.value) })} />
           </Field>
         </>
       ) : null}
@@ -479,8 +637,9 @@ function StepEditor({
               <Input value={step.continueLabel ?? ""} onChange={(event) => onChange({ ...step, continueLabel: event.target.value })} />
             </Field>
           ) : null}
+
           {step.options.map((option) => (
-            <div key={option.id} className="rounded-2xl border border-border bg-white p-4">
+            <div key={option.id} className="rounded-[1.25rem] border border-border bg-white p-4">
               <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{option.id}</p>
               <div className="mt-3 grid gap-4">
                 <Field label="label">
@@ -498,8 +657,8 @@ function StepEditor({
                 </Field>
                 <Field label="description">
                   <Textarea
-                    value={option.description ?? ""}
                     rows={3}
+                    value={option.description ?? ""}
                     onChange={(event) =>
                       onChange({
                         ...step,
@@ -529,26 +688,7 @@ function StepEditor({
         </div>
       ) : null}
 
-      {step.kind === "insight" ? (
-        <>
-          <Field label="primary label">
-            <Input value={step.primaryLabel} onChange={(event) => onChange({ ...step, primaryLabel: event.target.value })} />
-          </Field>
-          <Field label="bullets">
-            <Textarea value={step.bullets.join("\n")} rows={4} onChange={(event) => onChange({ ...step, bullets: toLines(event.target.value) })} />
-          </Field>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Field label="quote text">
-              <Textarea value={step.quoteText ?? ""} rows={3} onChange={(event) => onChange({ ...step, quoteText: event.target.value })} />
-            </Field>
-            <Field label="quote attribution">
-              <Input value={step.quoteAttribution ?? ""} onChange={(event) => onChange({ ...step, quoteAttribution: event.target.value })} />
-            </Field>
-          </div>
-        </>
-      ) : null}
-
-      {step.kind === "result" ? (
+      {step.kind === "message" ? (
         <>
           <div className="grid gap-4 lg:grid-cols-2">
             <Field label="primary label">
@@ -558,10 +698,110 @@ function StepEditor({
               <Input value={step.secondaryLabel ?? ""} onChange={(event) => onChange({ ...step, secondaryLabel: event.target.value })} />
             </Field>
           </div>
-          <Field label="disclaimer">
-            <Input value={step.disclaimer} onChange={(event) => onChange({ ...step, disclaimer: event.target.value })} />
+          <Field label="bullets">
+            <Textarea value={(step.bullets ?? []).join("\n")} rows={4} onChange={(event) => onChange({ ...step, bullets: toLines(event.target.value) })} />
           </Field>
+          {step.highlights?.length ? (
+            <div className="space-y-4">
+              <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">highlights</p>
+              {step.highlights.map((highlight) => (
+                <div key={highlight.id} className="rounded-[1.25rem] border border-border bg-white p-4">
+                  <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{highlight.id}</p>
+                  <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                    <Field label="label">
+                      <Input
+                        value={highlight.label}
+                        onChange={(event) =>
+                          onChange({
+                            ...step,
+                            highlights: step.highlights?.map((candidate) =>
+                              candidate.id === highlight.id ? { ...candidate, label: event.target.value } : candidate,
+                            ),
+                          })
+                        }
+                      />
+                    </Field>
+                    <Field label="value">
+                      <Input
+                        value={highlight.value}
+                        onChange={(event) =>
+                          onChange({
+                            ...step,
+                            highlights: step.highlights?.map((candidate) =>
+                              candidate.id === highlight.id ? { ...candidate, value: event.target.value } : candidate,
+                            ),
+                          })
+                        }
+                      />
+                    </Field>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </>
+      ) : null}
+
+      {step.kind === "analysis" ? (
+        <div className="space-y-4">
+          <div className="rounded-[1.25rem] border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+            stage count and timings are locked to cli publish. labels and descriptions remain editable here so preview stays accurate.
+          </div>
+          {step.stages.map((stage) => (
+            <div key={stage.id} className="rounded-[1.25rem] border border-border bg-white p-4">
+              <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{stage.id}</p>
+              <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                <Field label="label">
+                  <Input
+                    value={stage.label}
+                    onChange={(event) =>
+                      onChange({
+                        ...step,
+                        stages: step.stages.map((candidate) =>
+                          candidate.id === stage.id ? { ...candidate, label: event.target.value } : candidate,
+                        ),
+                      })
+                    }
+                  />
+                </Field>
+                <Field label="duration">
+                  <Input value={`${stage.durationMs}ms`} disabled />
+                </Field>
+                <div className="lg:col-span-2">
+                  <Field label="description">
+                    <Input
+                      value={stage.description ?? ""}
+                      onChange={(event) =>
+                        onChange({
+                          ...step,
+                          stages: step.stages.map((candidate) =>
+                            candidate.id === stage.id ? { ...candidate, description: event.target.value } : candidate,
+                          ),
+                        })
+                      }
+                    />
+                  </Field>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {step.kind === "result" ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Field label="primary label">
+            <Input value={step.primaryLabel} onChange={(event) => onChange({ ...step, primaryLabel: event.target.value })} />
+          </Field>
+          <Field label="secondary label">
+            <Input value={step.secondaryLabel ?? ""} onChange={(event) => onChange({ ...step, secondaryLabel: event.target.value })} />
+          </Field>
+          <div className="lg:col-span-2">
+            <Field label="disclaimer">
+              <Input value={step.disclaimer} onChange={(event) => onChange({ ...step, disclaimer: event.target.value })} />
+            </Field>
+          </div>
+        </div>
       ) : null}
 
       {step.kind === "lead" ? (
@@ -577,9 +817,9 @@ function StepEditor({
           <Field label="disclaimer">
             <Textarea value={step.disclaimer} rows={4} onChange={(event) => onChange({ ...step, disclaimer: event.target.value })} />
           </Field>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {step.fields.map((field) => (
-              <div key={field.id} className="rounded-2xl border border-border bg-white p-4">
+              <div key={field.id} className="rounded-[1.25rem] border border-border bg-white p-4">
                 <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{field.id}</p>
                 <div className="mt-3 grid gap-4 lg:grid-cols-2">
                   <Field label="label">
@@ -631,13 +871,22 @@ function StepEditor({
               <Input value={step.guarantee ?? ""} onChange={(event) => onChange({ ...step, guarantee: event.target.value })} />
             </Field>
           </div>
-          <Field label="offer bullets">
+          <Field label="bullets">
             <Textarea value={step.bullets.join("\n")} rows={4} onChange={(event) => onChange({ ...step, bullets: toLines(event.target.value) })} />
           </Field>
         </>
       ) : null}
     </>
   );
+}
+
+function clampMetricValue(value: string) {
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) {
+    return 1;
+  }
+
+  return Math.max(1, Math.min(100, Math.round(parsed)));
 }
 
 function toLines(value: string) {

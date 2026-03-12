@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://news.tophealthinsider.com/schemas/quiz-funnel.v2.json",
+  "title": "quiz funnel v2",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "slug",
+    "name",
+    "description",
+    "estimatedMinutes",
+    "theme",
+    "entrypoints",
+    "results",
+    "steps"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "quiz-funnel.v2"
+    },
+    "slug": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "estimatedMinutes": {
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 30
+    },
+    "theme": {
+      "type": "object",
+      "required": [
+        "variant",
+        "typeface",
+        "motion"
+      ],
+      "properties": {
+        "variant": {
+          "const": "monochrome-premium"
+        },
+        "typeface": {
+          "const": "sans"
+        },
+        "motion": {
+          "const": "smooth"
+        }
+      },
+      "additionalProperties": false
+    },
+    "entrypoints": {
+      "type": "array",
+      "minItems": 1
+    },
+    "results": {
+      "type": "array",
+      "minItems": 2
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "title",
+              "primaryLabel",
+              "trustPoints"
+            ],
+            "properties": {
+              "kind": {
+                "const": "welcome"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "title",
+              "selection",
+              "options"
+            ],
+            "properties": {
+              "kind": {
+                "const": "question"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "title",
+              "primaryLabel"
+            ],
+            "properties": {
+              "kind": {
+                "const": "message"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "title",
+              "stages"
+            ],
+            "properties": {
+              "kind": {
+                "const": "analysis"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "title",
+              "primaryLabel",
+              "disclaimer"
+            ],
+            "properties": {
+              "kind": {
+                "const": "result"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "title",
+              "submitLabel",
+              "consentLabel",
+              "disclaimer",
+              "fields"
+            ],
+            "properties": {
+              "kind": {
+                "const": "lead"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "title",
+              "ctaLabel",
+              "ctaUrl",
+              "bullets"
+            ],
+            "properties": {
+              "kind": {
+                "const": "offer"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}

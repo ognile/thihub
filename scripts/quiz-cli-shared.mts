@@ -65,6 +65,7 @@ export function printDefinitionSummary(definition: QuizDefinition) {
   const leadIndex = definition.steps.findIndex((step) => step.kind === "lead");
   const offerStep = definition.steps.find((step) => step.kind === "offer");
 
+  console.log(`schema-version: ${definition.schemaVersion}`);
   console.log(`slug: ${definition.slug}`);
   console.log(`name: ${definition.name}`);
   console.log(`steps: ${definition.steps.length}`);

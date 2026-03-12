@@ -69,11 +69,11 @@ export default function QuizDashboard() {
           <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">quiz platform</p>
           <h1 className="text-3xl font-black tracking-tight">schema-first funnels</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            cli is the source of truth. admin is for content, theme, publishing, and analytics.
+            cli is the source of truth. admin is for content, preview, publishing, and analytics.
           </p>
         </div>
         <div className="rounded-2xl border border-dashed border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          use <code>npm run quiz:publish -- content/quizzes/symptom-profile.json --env production</code>
+          use <code>npm run quiz:publish -- content/quizzes/symptom-profile-v2.json --env production</code>
         </div>
       </div>
 
