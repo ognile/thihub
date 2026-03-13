@@ -72,8 +72,8 @@ const OPTION_ACTIVE =
   "border-[#171614] bg-[#171614] text-white shadow-[0_24px_52px_rgba(23,22,20,0.16)]";
 const ANALYSIS_BAR_LAYOUT = [0.42, 0.68, 0.94, 0.58, 0.8];
 const MOBILE_BREAKPOINT_QUERY = "(max-width: 639px)";
-const MOBILE_ANALYSIS_STAGE_DURATIONS = [1050, 1150, 1100];
-const MOBILE_ANALYSIS_COMPLETION_DELAY_MS = 550;
+const MOBILE_ANALYSIS_STAGE_DURATIONS = [1350, 1500, 1300];
+const MOBILE_ANALYSIS_COMPLETION_DELAY_MS = 650;
 const MOBILE_STEP_EASE = [0.22, 1, 0.36, 1] as const;
 const DESKTOP_STAGE_EASE = [0.19, 1, 0.22, 1] as const;
 const MOBILE_PROGRESS_EASE = [0.16, 1, 0.3, 1] as const;
@@ -226,22 +226,22 @@ function buildMobileAnalysisStages(
   return [
     {
       id: "normalize-answers",
-      label: "normalizing your answers",
-      description: "cleaning the loudest clues first so noise stops competing with the real pattern.",
+      label: "normalizing answer weights",
+      description: "removing broad-match noise from the strongest signals you gave us.",
       evidenceLabel: "recent signal",
       evidenceValue: primarySelection,
     },
     {
       id: "compare-clusters",
-      label: "comparing signal clusters",
-      description: `checking how your answers stack against the strongest ${adaptiveSignal.leadingBadge.toLowerCase()} pattern.`,
+      label: "checking symptom overlap",
+      description: `scoring your answers against the closest ${adaptiveSignal.leadingBadge.toLowerCase()} pattern.`,
       evidenceLabel: "highest overlap",
       evidenceValue: secondarySelection,
     },
     {
       id: "lock-pattern",
-      label: "locking the strongest pattern",
-      description: "staging the clearest next move so the result reads like a report instead of a generic score.",
+      label: "locking report direction",
+      description: "finalizing the clearest pattern and the next step tied to it.",
       evidenceLabel: "report direction",
       evidenceValue: resultProfile.badge,
     },
@@ -1512,6 +1512,8 @@ function AnalysisStep({
   const progressStartPercent = (activeStageStartMs / totalDurationMs) * 100;
   const progressEndPercent = isFinished ? 100 : (activeStageEndMs / totalDurationMs) * 100;
   const stageProgressLabel = isFinished ? "complete" : isPhoneViewport ? "resolving" : "running";
+  const mobileRecentSignal = adaptiveSignal.recentSelections[0]?.optionLabel ?? "recent answer captured";
+  const mobileSignalSummary = adaptiveSignal.recentSelections[1]?.optionLabel ?? resultProfile.badge;
 
   useEffect(() => {
     let stageTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1560,21 +1562,29 @@ function AnalysisStep({
 
   if (isPhoneViewport) {
     return (
-      <div className="space-y-5">
-        <div className="space-y-4">
-          {step.kicker ? <p className={STEP_LABEL}>{step.kicker}</p> : null}
-          <h1 className={STEP_TITLE}>{step.title}</h1>
-          {step.body ? <p className={STEP_BODY}>{step.body}</p> : null}
-        </div>
-
-        <div className={cn(LIGHT_INSET, "overflow-hidden p-4")}>
+      <div data-mobile-analysis="true" className="space-y-4">
+        <div className={cn(LIGHT_INSET, "overflow-hidden p-3.5")}>
           <div className="rounded-[1.45rem] border border-black/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,243,238,0.96))] p-4 shadow-[0_18px_44px_rgba(23,22,20,0.06)]">
-            <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.28em] text-[#7f776d]">
-              <span>profile analysis</span>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-[0.32em] text-[#7f776d]">
+                  {step.kicker ?? "profile analysis"}
+                </p>
+                <h1 className="mt-2 text-[1.4rem] font-semibold leading-[1.02] tracking-[-0.05em] text-[#15130f]">
+                  {step.title}
+                </h1>
+              </div>
+              <div className="rounded-full border border-black/[0.08] bg-white/86 px-2.5 py-1 text-[10px] uppercase tracking-[0.24em] text-[#6d665d]">
+                {isFinished ? "match locked" : "scan live"}
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between text-[10px] uppercase tracking-[0.28em] text-[#7f776d]">
+              <span>phase {Math.min(activeStageIndex + 1, stageCount)} of {stageCount}</span>
               <span>{Math.round(progressEndPercent)}%</span>
             </div>
 
-            <div className="mt-4 h-[5px] overflow-hidden rounded-full bg-black/[0.08]">
+            <div className="mt-2.5 h-[5px] overflow-hidden rounded-full bg-black/[0.08]">
               <motion.div
                 key={`mobile-analysis-progress-${isFinished ? "complete" : activeStage?.id ?? "analysis"}`}
                 className="h-full rounded-full bg-[#171614]"
@@ -1587,9 +1597,9 @@ function AnalysisStep({
               />
             </div>
 
-            <div className="mt-5 rounded-[1.2rem] border border-black/[0.07] bg-white/92 px-4 py-4" role="status" aria-live="polite" aria-atomic="true">
-              <p className="text-[11px] uppercase tracking-[0.28em] text-[#81796f]">
-                phase {Math.min(activeStageIndex + 1, stageCount)} of {stageCount}
+            <div className="mt-4 rounded-[1.2rem] border border-black/[0.07] bg-white/92 px-3.5 py-3.5" role="status" aria-live="polite" aria-atomic="true">
+              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#827a70]">
+                {isFinished ? "result confidence locked" : "active process"}
               </p>
               <AnimatePresence mode="wait">
                 <motion.div
@@ -1598,21 +1608,21 @@ function AnalysisStep({
                   animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
                   exit={reducedMotion ? undefined : { opacity: 0 }}
                   transition={reducedMotion ? undefined : { duration: 0.18 }}
-                  className="mt-3"
+                  className="mt-2.5"
                 >
-                  <p className="text-[1.12rem] font-semibold leading-[1.08] tracking-[-0.03em] text-[#171410]">
-                    {isFinished ? "your report is ready." : activeStage?.label ?? "finalizing your report"}
+                  <p className="text-[1.02rem] font-semibold leading-[1.12] tracking-[-0.03em] text-[#171410]">
+                    {isFinished ? "report match finalized" : activeStage?.label ?? "finalizing your report"}
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-[#575149]">
+                  <p className="mt-1.5 text-[13px] leading-5 text-[#575149]">
                     {isFinished
-                      ? "we locked the clearest pattern and staged the next move."
+                      ? `highest confidence match: ${resultProfile.badge.toLowerCase()}.`
                       : activeStage?.description ?? "finalizing your report"}
                   </p>
                 </motion.div>
               </AnimatePresence>
             </div>
 
-            <div className="mt-4 grid gap-2.5">
+            <div className="mt-3 grid gap-2">
               {stageDefinitions.map((stage, index) => {
                 const isActive = index === activeStageIndex && !isFinished;
                 const isComplete = completedStageIds.includes(stage.id) || isFinished;
@@ -1621,40 +1631,53 @@ function AnalysisStep({
                   <div
                     key={stage.id}
                     className={cn(
-                      "flex items-start gap-3 rounded-[1.15rem] border px-3 py-3",
+                      "flex items-center gap-3 rounded-[1rem] border px-3 py-2.5",
                       isActive
                         ? "border-[#171614] bg-white text-[#171410]"
                         : isComplete
                           ? "border-black/[0.08] bg-white text-[#171410]"
-                          : "border-black/[0.06] bg-[#f7f5ef] text-[#5c554d]",
+                          : "border-black/[0.06] bg-[#f7f5ef] text-[#60584f]",
                     )}
                   >
                     <div
                       className={cn(
-                        "mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full border",
+                        "flex h-5 w-5 flex-none items-center justify-center rounded-full border",
                         isActive || isComplete ? "border-black/[0.08] bg-[#171614] text-white" : "border-black/[0.08] bg-white",
                       )}
                     >
                       {isComplete ? (
-                        <Check className="h-3.5 w-3.5 text-white" strokeWidth={1.2} />
+                        <Check className="h-3 w-3 text-white" strokeWidth={1.2} />
                       ) : isActive ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-white/80" strokeWidth={1.2} />
+                        <Loader2 className="h-3 w-3 animate-spin text-white/80" strokeWidth={1.2} />
                       ) : (
-                        <span className="h-2 w-2 rounded-full bg-[#171614]/20" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#171614]/22" />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[10px] uppercase tracking-[0.26em] text-[#877f74]">{stage.evidenceLabel}</p>
-                      <p className="mt-2 text-sm leading-6 text-current">{stage.evidenceValue}</p>
+                      <p className="truncate text-[12px] font-medium leading-4 text-current">{stage.label}</p>
                     </div>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#7f776d]">
+                      {isComplete ? "locked" : isActive ? "live" : "queued"}
+                    </p>
                   </div>
                 );
               })}
             </div>
 
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-[0.95rem] border border-black/[0.06] bg-white/88 px-3 py-2.5">
+                <p className="text-[9px] uppercase tracking-[0.24em] text-[#867f75]">latest signal</p>
+                <p className="mt-1 truncate text-[12px] font-medium leading-4 text-[#171410]">{mobileRecentSignal}</p>
+              </div>
+              <div className="rounded-[0.95rem] border border-black/[0.06] bg-white/88 px-3 py-2.5">
+                <p className="text-[9px] uppercase tracking-[0.24em] text-[#867f75]">pattern lead</p>
+                <p className="mt-1 truncate text-[12px] font-medium leading-4 text-[#171410]">{mobileSignalSummary}</p>
+              </div>
+            </div>
+
             {isFinished ? (
-              <p className="mt-4 text-center text-[10px] uppercase tracking-[0.28em] text-[#867e73]">
-                opening your report...
+              <p className="mt-3 text-center text-[10px] uppercase tracking-[0.28em] text-[#867e73]">
+                opening report...
               </p>
             ) : null}
           </div>

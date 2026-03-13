@@ -11,8 +11,8 @@ const VIEWPORTS = [
 ];
 const STEP_SETTLE_MS = 1200;
 const QUESTION_STABILITY_CHECK_MS = 120;
-const ANALYSIS_MIN_MS = 3600;
-const ANALYSIS_MAX_MS = 4200;
+const ANALYSIS_MIN_MS = 4500;
+const ANALYSIS_MAX_MS = 5600;
 
 function assert(condition, message) {
   if (!condition) {
@@ -134,6 +134,20 @@ async function assertDockActionVisible(page, pattern, label) {
   assert(
     box.y >= 0 && box.y + box.height <= viewport.height,
     `${label}: dock action is not fully visible in viewport`,
+  );
+}
+
+async function assertAnalysisFitsFirstFold(page, label) {
+  const analysis = page.locator("[data-mobile-analysis='true']").first();
+  await analysis.waitFor({ state: "visible", timeout: 10000 });
+  const box = await analysis.boundingBox();
+  const viewport = page.viewportSize();
+
+  assert(box, `${label}: analysis block did not produce a bounding box`);
+  assert(box.y >= 0, `${label}: analysis block starts above the viewport`);
+  assert(
+    box.y + box.height <= viewport.height,
+    `${label}: analysis block extends below the first fold (${Math.round(box.y + box.height)} > ${viewport.height})`,
   );
 }
 
@@ -334,6 +348,7 @@ async function runViewport(browser, viewport) {
   await waitForProgress(page, "12/16");
   await settle(page, 160);
   await assertNoHorizontalOverflow(page, `${viewport.label} analysis`);
+  await assertAnalysisFitsFirstFold(page, `${viewport.label} analysis`);
   metrics.analysisMs = await assertAnalysisFlow(page, viewport.label);
   await page.waitForTimeout(220);
   await assertNoHorizontalOverflow(page, `${viewport.label} result`);
